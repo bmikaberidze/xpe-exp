@@ -54,13 +54,13 @@ peft:
     encoder_embedding_normalize_max_norm: null
 
 model:
-    architecture: aya
+    architecture: bloom
     pretrained:
         cls: AutoModelForCausalLM
         args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
-            torch_dtype: bfloat16
-            device_map: auto
-        name: CohereLabs/aya-expanse-8b
+            # torch_dtype: bfloat16
+            # device_map: auto
+        name: bigscience/bloom-560m
         source: huggingface # null | local | huggingface
         checkpoint: null
         adapter: null
@@ -75,7 +75,7 @@ model:
 
 tokenizer:
     source: huggingface # local | huggingface
-    name: CohereLabs/aya-expanse-8b
+    name: bigscience/bloom-560m
     type: null # null | wordpiece | sentpiece
     algorithm: null
     adapt_to_lm: false
@@ -85,7 +85,7 @@ tokenizer:
 ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
-    dirs: mcqa/xstory_cloze_ftp/ar/tokenized|CohereLabs|aya-expanse-8b
+    dirs: mcqa/xstory_cloze_ftp/ar/tokenized|bigscience|bloom-560m
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     comes_with_splits:
@@ -101,13 +101,17 @@ ds:
     task_id: null
         # key: task_ids
         # standardize_key: false
-    preproc_rules: null
+    preproc_rules: 
+        subset:
+            run: true
+            use: 0.01 # Use only (X*100)% of the dataset
+            save_as:  false # false | txt
 
 eval:
-    before_training: false
+    before_training: true
     before_training_on_test: false
     during_training: null
-    after_training: false
+    after_training: true
     after_training_on_test: false
     per_task: null
     downstream_tasks: false
@@ -123,6 +127,9 @@ trainer:
     cls: Trainer # Trainer | Seq2SeqTrainer
 
 data_collator:
+    # We use DataCollatorForSeq2Seq instead of DataCollatorForLanguageModeling,
+    # because, unlike standard CausalLM setups, we provide the collator with
+    # custom labels that require padding.
     cls: DataCollatorForSeq2Seq
     args:
         max_length: 1024
@@ -137,7 +144,7 @@ custom_training_args:
     test_force_sequential: true
     # Early Stopping
     early_stopping_after: 0.5 # Don't allow early stopping before X% of total training steps.
-    early_stopping_patience: 5
+    early_stopping_patience: 30
     early_stopping_threshold: 0.0
     # Final Model Saving
     save_final_model: true
@@ -147,17 +154,11 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # Per-param-group LR/WD overrides. Substring-matched against
-    # parameter names; unmatched groups log a warning and are skipped.
-    # Disabled — the XPE adapter trains at the top-level learning_rate.
-    # Re-enable to give the XPE input embedding a different LR than the
-    # MLP encoder (use 'xpe_embedding' for MLP encoder; 'embedding' to
-    # cover all prompt-encoder embeddings; see src/config_utils.py).
-    # optimizer_grouped_parameters:
-    # - param_name_parts:
-    #     - xpe_embedding
-    #   lr: 5e-5
-    #   weight_decay: 0.01
+    optimizer_grouped_parameters:
+    - param_name_parts:
+        - dedicated_embeddings
+      lr: 5.0e-5
+      weight_decay: 0.01
     # - param_name_parts:
     #     - shared_embedding
     #   lr: 1e-6
@@ -167,13 +168,13 @@ training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
     args:
         # Epochs
-        num_train_epochs: 10  # ignored at runtime — max_steps overrides — but the toolkit's config wrapper expects this key to be present
-        max_steps: 6000
+        num_train_epochs: 1
+        # max_steps: 6000
 
         # Batch Size
         per_device_train_batch_size: 16
         gradient_accumulation_steps: 1
-        per_device_eval_batch_size: 8
+        per_device_eval_batch_size: 32
         eval_accumulation_steps: 1
 
         # Logging
@@ -183,12 +184,12 @@ training_args:
         report_to: wandb # wandb | none
 
         # Evaluation
-        eval_strategy: steps  # "steps" or "epoch" for evaluation at the end of each epoch
-        eval_steps: 500  # How often to run evaluation during training
+        eval_strategy: epoch  # "steps" or "epoch" for evaluation at the end of each epoch
+        eval_steps: null  # How often to run evaluation during training
 
         # Saving
-        save_strategy: steps # no / steps / epoch / best
-        save_steps: 500
+        save_strategy: epoch # no / steps / epoch / best
+        save_steps: null
         save_total_limit: 1
         save_safetensors: true
         overwrite_output_dir: true
@@ -200,7 +201,7 @@ training_args:
         greater_is_better: true # whether a larger metric value is better
 
         # Optimizer
-        learning_rate: 1e-4
+        learning_rate: 5.0e-5
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2

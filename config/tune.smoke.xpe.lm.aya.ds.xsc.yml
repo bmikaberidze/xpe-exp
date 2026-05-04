@@ -101,7 +101,11 @@ ds:
     task_id: null
         # key: task_ids
         # standardize_key: false
-    preproc_rules: null
+    preproc_rules: 
+        subset:
+            run: true
+            use: 0.01 # Use only (X*100)% of the dataset
+            save_as:  false # false | txt
 
 eval:
     before_training: false
@@ -137,7 +141,7 @@ custom_training_args:
     test_force_sequential: true
     # Early Stopping
     early_stopping_after: 0.5 # Don't allow early stopping before X% of total training steps.
-    early_stopping_patience: 5
+    early_stopping_patience: 30
     early_stopping_threshold: 0.0
     # Final Model Saving
     save_final_model: true
@@ -147,17 +151,11 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # Per-param-group LR/WD overrides. Substring-matched against
-    # parameter names; unmatched groups log a warning and are skipped.
-    # Disabled — the XPE adapter trains at the top-level learning_rate.
-    # Re-enable to give the XPE input embedding a different LR than the
-    # MLP encoder (use 'xpe_embedding' for MLP encoder; 'embedding' to
-    # cover all prompt-encoder embeddings; see src/config_utils.py).
-    # optimizer_grouped_parameters:
-    # - param_name_parts:
-    #     - xpe_embedding
-    #   lr: 5e-5
-    #   weight_decay: 0.01
+    optimizer_grouped_parameters:
+    - param_name_parts:
+        - dedicated_embeddings
+      lr: 5e-5
+      weight_decay: 0.01
     # - param_name_parts:
     #     - shared_embedding
     #   lr: 1e-6
@@ -167,14 +165,19 @@ training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
     args:
         # Epochs
-        num_train_epochs: 10  # ignored at runtime — max_steps overrides — but the toolkit's config wrapper expects this key to be present
-        max_steps: 6000
+        num_train_epochs: 1
+        # max_steps: 6000
 
-        # Batch Size
-        per_device_train_batch_size: 16
-        gradient_accumulation_steps: 1
-        per_device_eval_batch_size: 8
+        # Batch Size — low-memory: per-device 1 with grad-accum 8 → effective batch 8.
+        # Activation memory dominates for 8B causal-LM training; keep per_device_train_batch_size small.
+        per_device_train_batch_size: 1
+        gradient_accumulation_steps: 8
+        per_device_eval_batch_size: 2
         eval_accumulation_steps: 1
+
+        # Memory: recompute activations during backward instead of storing them all.
+        # Cuts activation VRAM ~3-5x at the cost of ~25-30% slower training.
+        gradient_checkpointing: true
 
         # Logging
         logging_strategy: steps # steps
@@ -183,12 +186,12 @@ training_args:
         report_to: wandb # wandb | none
 
         # Evaluation
-        eval_strategy: steps  # "steps" or "epoch" for evaluation at the end of each epoch
-        eval_steps: 500  # How often to run evaluation during training
+        eval_strategy: epoch  # "steps" or "epoch" for evaluation at the end of each epoch
+        eval_steps: null  # How often to run evaluation during training
 
         # Saving
-        save_strategy: steps # no / steps / epoch / best
-        save_steps: 500
+        save_strategy: epoch # no / steps / epoch / best
+        save_steps: null
         save_total_limit: 1
         save_safetensors: true
         overwrite_output_dir: true
@@ -200,7 +203,7 @@ training_args:
         greater_is_better: true # whether a larger metric value is better
 
         # Optimizer
-        learning_rate: 1e-4
+        learning_rate: 5e-5
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2

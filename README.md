@@ -72,12 +72,18 @@ python -m scripts.run --config ./config/test.lm.aya.ds.bebe.yml
 python -m scripts.run --config ./config/eval.lm.bloom.ds.xsc.yml
 python -m scripts.run --config ./config/eval.lm.aya.ds.xsc.yml
 
-# Tune XPE on XSC
+# Tune XPE on XSC (full)
 python -m scripts.run --config ./config/tune.xpe.lm.bloom.ds.xsc.yml
 python -m scripts.run --config ./config/tune.xpe.lm.aya.ds.xsc.yml
+
+# Smoke variants — 1% subset, 1 epoch — for fast end-to-end verification
+python -m scripts.run --config ./config/tune.smoke.xpe.lm.bloom.ds.xsc.yml
+python -m scripts.run --config ./config/tune.smoke.xpe.lm.aya.ds.xsc.yml
 ```
 
 Each run logs to W&B (set `WANDB_API_KEY` in `.env`, or flip `report_to: none` in the config for offline). For aya-8b on a single 48 GB GPU, the configs use `torch_dtype: bfloat16` + `device_map: auto` so weights stream directly to the GPU instead of buffering in CPU RAM (avoids cgroup OOM under tight SLURM allocations).
+
+The full aya tune is dataset-size-agnostic: `max_steps: 6000` with `eval_steps: 500` / `save_steps: 500` and early stopping (`patience: 5`, `early_stopping_after: 0.5`). XPE adapter trains at `learning_rate: 1e-4`; the per-param-group override block is left commented as a template for re-enabling a separate LR on `xpe_embedding`.
 
 Visual / quantitative analyses (XPE vs SPT representations):
 
