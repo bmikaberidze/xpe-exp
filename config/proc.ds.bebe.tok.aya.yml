@@ -1,0 +1,76 @@
+mode: preprocess # preprocess | train | finetune | evaluate | test
+
+task:
+    id: null
+    category: text_generation
+    name: mcqa_ftp # multi choice question answering as first token prediction
+
+tokenizer:
+    source: huggingface # local | huggingface
+    name: CohereLabs/aya-expanse-8b
+    type: null # null | wordpiece | sentpiece
+    algorithm: null
+    adapt_to_lm: false
+    args:
+        padding_side: right
+
+ds:
+    descriptive_name: null
+    category: benchmarks # benchmarks | corpora | collections | raw
+    dirs: mcqa/belebele_ftp/kat_Geor
+    name: null
+    type: huggingface_saved # text | csv | huggingface_saved | huggingface
+    comes_with_splits:
+        train: false
+        test: true
+        validation: false
+    input:
+        key: text
+        standardize_key: true
+    label:
+        key: answer_label
+        standardize_key: true
+    task_id: null
+        # key: task_ids
+        # standardize_key: false
+    preproc_rules: # None
+        subset:
+            run: false
+            use: 0.1 # Use only (X*100)% of the dataset
+            save_as:  false # false | txt
+        tokenize:
+            run: true
+            pre_rules:
+                label_name_to_id: false
+                split_sentences: false # false | kast | nltkst | spacyst
+                append_eos_token: false
+                keep_target_texts_for_save: true
+                text_to_text_rules: false
+            rules:
+                max_length: 1024
+                padding: false # max_length | true (longest) | false (do_not_pad) 
+                truncation: false
+                add_special_tokens: true
+                return_special_tokens_mask: false
+                return_token_type_ids: false
+                return_length: true
+                return_tensors: np
+                is_split_into_words: false
+            post_rules:
+                end_truncation_with_eos: false
+                concat_samples: false
+                sort_by_len: true
+            save_as: huggingface # false | csv | huggingface
+        
+        
+env: # Eenvironment variables are stored in os.environ during load config
+
+    # CUDA_LAUNCH_BLOCKING: '1'
+    PYTORCH_CUDA_ALLOC_CONF: null # max_split_size_mb:128
+
+    # huggingface/tokenizers: The current process just got forked, after parallelism has already been used. 
+    # Disabling parallelism to avoid deadlocks...
+    # To disable this warning, you can either:
+    #         - Avoid using `tokenizers` before the fork if possible
+    #         - Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+    TOKENIZERS_PARALLELISM: 'true' # 'true' | 'false'

@@ -1,0 +1,211 @@
+mode: test # preprocess | train | finetune | evaluate | test
+
+task:
+    id: null
+    category: text_generation 
+    name: mcqa_ftp # multi choice question answering by first token prediction
+    metric_groups:
+    - metrics: 
+        - accuracy
+    preproc_rules:
+        # Token Classification
+        flatten: true
+        filter_padded: true
+        label_id_to_name: false
+        filter_by_prefixes: false
+        # Text To Text
+        decode: false
+        label_name_strip_lower: false
+        label_name_to_float: false
+        label_name_to_id: false
+        # Others
+        verify_labels_match: true
+        calc_confusion_matrix: false
+        prediction_axis: -1
+
+peft: 
+    peft_type: null
+    task_type: null
+
+model:
+    architecture: aya
+    pretrained:
+        cls: AutoModelForCausalLM
+        args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
+            # torch_dtype: bfloat16
+            # device_map: auto
+        name: bigscience/bloom-560m
+        source: huggingface # null | local | huggingface
+        checkpoint: null
+        adapter: null
+    # For TRAIN (from scratch), use `init:` instead of `pretrained:`, e.g.:
+    # init:
+    #     cls: BertForMaskedLM        # optional override; else arch-derived
+    #     config:
+    #         cls: BertConfig         # optional override; else arch-derived
+    #         args:                   # splatted into the *Config ctor (vocab_size is injected by trainer)
+    #             hidden_size: 768
+    #             num_hidden_layers: 12
+
+tokenizer:
+    source: huggingface # local | huggingface
+    name: bigscience/bloom-560m
+    type: null # null | wordpiece | sentpiece
+    algorithm: null
+    adapt_to_lm: false
+    args:
+        padding_side: right
+
+ds:
+    descriptive_name: null
+    category: benchmarks # benchmarks | corpora | collections | raw
+    dirs: mcqa/belebele_ftp/ell_Grek/tokenized|CohereLabs|aya-expanse-8b
+    name: null
+    type: huggingface_saved # text | csv | huggingface_saved | huggingface
+    comes_with_splits: 
+        train: false
+        test: true
+        validation: test
+    input:
+        key: text
+        standardize_key: true
+    label:
+        key: answer_label
+        standardize_key: true
+    task_id: null
+        # key: task_ids
+        # standardize_key: false
+    preproc_rules: null
+
+eval:
+    before_training: false
+    before_training_on_test: false
+    during_training: null
+    after_training: false
+    after_training_on_test: false
+    per_task: null
+    downstream_tasks: false
+
+test:
+    run: true
+    zero_shot: true
+    zero_shot_only: true
+    save_predictions: false
+    report_to_wandb: true
+
+trainer:
+    cls: Trainer # Trainer | Seq2SeqTrainer
+
+data_collator:
+    cls: DataCollatorForSeq2Seq
+    args:
+        max_length: 1024
+        padding: 'longest' # true or longest | max_length | false
+        pad_to_multiple_of: 4
+        return_tensors: pt
+
+custom_training_args:
+    # Sampling
+    train_force_sequential: false
+    eval_force_sequential: true
+    test_force_sequential: true
+    # Early Stopping
+    early_stopping_after: 0.5 # Don’t allow early stopping before X% of total training steps.
+    early_stopping_patience: 30
+    early_stopping_threshold: 0.0
+    # Final Model Saving
+    save_final_model: true
+    keep_only_final_model: true
+    # Random Task Exclusion
+    random_task_exclusion: false
+    # Do not remove in _remove_unused_columns
+    usable_columns:
+    - task_ids
+    optimizer_grouped_parameters:
+    - param_name_parts:
+        - dedicated_embeddings
+      lr: 5e-5
+      weight_decay: 0.01
+    # - param_name_parts:
+    #     - shared_embedding
+    #   lr: 1e-6
+    #   weight_decay: 0.01
+
+training_args:
+    cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
+    args:
+        # Epochs
+        num_train_epochs: 10
+        # max_steps: 6000
+
+        # Batch Size
+        per_device_train_batch_size: 32
+        gradient_accumulation_steps: 1
+        per_device_eval_batch_size: 4
+        eval_accumulation_steps: 1
+
+        # Logging
+        logging_strategy: steps # steps
+        logging_first_step: false
+        logging_steps: 50
+        report_to: wandb # wandb | none
+
+        # Evaluation
+        eval_strategy: epoch  # "steps" or "epoch" for evaluation at the end of each epoch
+        eval_steps: null  # How often to run evaluation during training
+
+        # Saving
+        save_strategy: epoch # no / steps / epoch / best
+        save_steps: null
+        save_total_limit: 1
+        save_safetensors: true
+        overwrite_output_dir: true
+        push_to_hub: false
+
+        # Loading Best Model
+        load_best_model_at_end: true # the best model (in terms of evaluation metric) is loaded at the end of training    
+        metric_for_best_model: accuracy # specify the metric to determine the 'best' model
+        greater_is_better: true # whether a larger metric value is better
+
+        # Optimizer
+        learning_rate: 5e-5
+        lr_scheduler_type: cosine_with_restarts
+        lr_scheduler_kwargs: 
+            num_cycles: 2
+        warmup_ratio: 0.05
+        weight_decay: 0.01
+        max_grad_norm: 1.0
+    
+        # Dataloader
+        # dataloader_num_workers: 4 # default: 4 - Number of workers for the dataloader
+        # dataloader_pin_memory: true # default: True - Whether to pin memory for the dataloader
+        # dataloader_persistent_workers: true # default: False - Whether to use persistent workers for the dataloader
+
+        # Grouping
+        group_by_length: true # Whether to group samples by length or not while batching
+        length_column_name: length
+
+        # Others
+        # predict_with_generate: True  # Important for generation tasks
+        full_determinism: false
+        # remove_unused_columns: false  # KEEP all columns    
+        bf16: true
+        # fp16_opt_level: O2
+        fp16: false
+
+cuda:
+    empty_cache_steps: null
+
+# While loading configuration 
+# this parameters are added to the environment variables
+env:
+
+    # CUDA_LAUNCH_BLOCKING: '1'
+    PYTORCH_CUDA_ALLOC_CONF: null # max_split_size_mb:128
+
+    # huggingface/tokenizers: The current process just got forked, after parallelism has already been used. 
+    # Disabling parallelism to avoid deadlocks...
+    # To disable this warning, you can either:
+    #         - Avoid using `tokenizers` before the fork if possible
+    #         - Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+    TOKENIZERS_PARALLELISM: 'true' # 'true' | 'false'
