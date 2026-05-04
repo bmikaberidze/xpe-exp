@@ -32,8 +32,8 @@ model:
     pretrained:
         cls: AutoModelForCausalLM
         args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
-            # torch_dtype: bfloat16
-            # device_map: auto
+            torch_dtype: bfloat16
+            device_map: auto
         name: CohereLabs/aya-expanse-8b
         source: huggingface # null | local | huggingface
         checkpoint: null

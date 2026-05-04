@@ -32,9 +32,9 @@ model:
     pretrained:
         cls: AutoModelForCausalLM
         args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
-            # torch_dtype: bfloat16
-            # device_map: auto
-        name: bigscience/bloom-560m
+            torch_dtype: bfloat16
+            device_map: auto
+        name: CohereLabs/aya-expanse-8b
         source: huggingface # null | local | huggingface
         checkpoint: null
         adapter: null
@@ -49,7 +49,7 @@ model:
 
 tokenizer:
     source: huggingface # local | huggingface
-    name: bigscience/bloom-560m
+    name: CohereLabs/aya-expanse-8b
     type: null # null | wordpiece | sentpiece
     algorithm: null
     adapt_to_lm: false
