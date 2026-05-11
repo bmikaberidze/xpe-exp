@@ -112,6 +112,10 @@ custom_training_args:
     train_force_sequential: false
     eval_force_sequential: false
     test_force_sequential: false
+    # Variable-size batching: 'auto' calibrates per-GPU at job start;
+    # replace with an int (e.g. 8192) to skip calibration on reruns.
+    test_max_tokens_per_batch: auto
+    eval_max_tokens_per_batch: auto
     # Batch Size
     train_max_batch_size: false
     eval_max_batch_size: true
