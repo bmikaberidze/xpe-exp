@@ -39,12 +39,12 @@ peft:
     #
     ## PromptEncoderConfig(PromptLearningConfig): This is the configuration class to store the configuration of a [`PromptEncoder`].
     encoder_reparameterization_type: MLP # (Union[[`PromptEncoderReparameterizationType`], `str`]): The type of reparameterization to use. (MLP, LSTM)
-    encoder_hidden_size: 256 # (`int`): The hidden size of the prompt encoder.
+    encoder_hidden_size: 1024 # (`int`): The hidden size of the prompt encoder.
     encoder_num_layers: 2 # (`int`): The number of layers of the prompt encoder.
     encoder_dropout: 0.1 # (`float`): The dropout probability of the prompt encoder.
     #
     ## CrossPromptEncoderConfig(PromptEncoderConfig): This is the configuration class to store the configuration of a [`CrossPromptEncoder`].
-    encoder_ratio: 1
+    encoder_ratio: 0.3
     encoder_input_size: null
     encoder_init_state_dict_path: null
     encoder_freeze: false
@@ -54,13 +54,13 @@ peft:
     encoder_embedding_normalize_max_norm: null
 
 model:
-    architecture: bloom
+    architecture: aya
     pretrained:
         cls: AutoModelForCausalLM
         args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
-            # torch_dtype: bfloat16
-            # device_map: auto
-        name: bigscience/bloom-560m
+            torch_dtype: bfloat16
+            device_map: auto
+        name: CohereLabs/aya-expanse-8b
         source: huggingface # null | local | huggingface
         checkpoint: null
         adapter: null
@@ -75,7 +75,7 @@ model:
 
 tokenizer:
     source: huggingface # local | huggingface
-    name: bigscience/bloom-560m
+    name: CohereLabs/aya-expanse-8b
     type: null # null | wordpiece | sentpiece
     algorithm: null
     adapt_to_lm: false
@@ -85,7 +85,7 @@ tokenizer:
 ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
-    dirs: mcqa/xstory_cloze_ftp/ar/tokenized|bigscience|bloom-560m
+    dirs: mcqa/xstory_cloze_ftp/ar/tokenized|CohereLabs|aya-expanse-8b
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     comes_with_splits:
@@ -101,17 +101,13 @@ ds:
     task_id: null
         # key: task_ids
         # standardize_key: false
-    preproc_rules: 
-        subset:
-            run: false
-            use: 0.01 # Use only (X*100)% of the dataset
-            save_as:  false # false | txt
+    preproc_rules: null
 
 eval:
-    before_training: true
+    before_training: false
     before_training_on_test: false
     during_training: null
-    after_training: true
+    after_training: false
     after_training_on_test: false
     per_task: null
     downstream_tasks: false
@@ -127,9 +123,6 @@ trainer:
     cls: Trainer # Trainer | Seq2SeqTrainer
 
 data_collator:
-    # We use DataCollatorForSeq2Seq instead of DataCollatorForLanguageModeling,
-    # because, unlike standard CausalLM setups, we provide the collator with
-    # custom labels that require padding.
     cls: DataCollatorForSeq2Seq
     args:
         max_length: 1024
@@ -144,7 +137,7 @@ custom_training_args:
     test_force_sequential: true
     # Early Stopping
     early_stopping_after: 0.5 # Don't allow early stopping before X% of total training steps.
-    early_stopping_patience: 30
+    early_stopping_patience: 5
     early_stopping_threshold: 0.0
     # Final Model Saving
     save_final_model: true
@@ -154,23 +147,26 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # optimizer_grouped_parameters:
-    # - param_name_parts:
-    #     - xpe_embeddings
-    #   lr: 5.0e-5
-    #   weight_decay: 0.01
+    # Per-param-group LR/WD overrides. Substring-matched against
+    # parameter names; unmatched groups log a warning and are skipped.
+    optimizer_grouped_parameters:
+    - param_name_parts:
+        - xpe_embedding
+        - xpe_head
+      lr: 5e-5
+      weight_decay: 0.01
 
 training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
     args:
         # Epochs
-        num_train_epochs: 10
-        # max_steps: 6000
+        num_train_epochs: 10  # ignored at runtime — max_steps overrides — but the toolkit's config wrapper expects this key to be present
+        max_steps: 6000
 
         # Batch Size
         per_device_train_batch_size: 16
         gradient_accumulation_steps: 2  # effective batch 32 (paper)
-        per_device_eval_batch_size: 32
+        per_device_eval_batch_size: 8
         eval_accumulation_steps: 1
 
         # Logging
@@ -180,12 +176,12 @@ training_args:
         report_to: wandb # wandb | none
 
         # Evaluation
-        eval_strategy: epoch  # "steps" or "epoch" for evaluation at the end of each epoch
-        eval_steps: null  # How often to run evaluation during training
+        eval_strategy: steps  # "steps" or "epoch" for evaluation at the end of each epoch
+        eval_steps: 500  # How often to run evaluation during training
 
         # Saving
-        save_strategy: epoch # no / steps / epoch / best
-        save_steps: null
+        save_strategy: steps # no / steps / epoch / best
+        save_steps: 500
         save_total_limit: 1
         save_safetensors: true
         overwrite_output_dir: true
@@ -205,12 +201,12 @@ training_args:
             scale_parameter: false   # disable Adafactor's per-param LR rescaling
             relative_step: false     # disable Adafactor's internal LR schedule (external cosine drives LR)
             warmup_init: false       # only meaningful when relative_step=true
-        learning_rate: 5.0e-5
+        learning_rate: 5e-3
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2
         warmup_ratio: 0.1
-        weight_decay: 0.01
+        weight_decay: 0.0  # global covers SPT-side soft prompt (paper: no wd); XPE-side encoder/head get wd=0.01 via optimizer_grouped_parameters override
         max_grad_norm: 1.0
 
         # Dataloader

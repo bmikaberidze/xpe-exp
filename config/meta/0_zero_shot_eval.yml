@@ -1,0 +1,8 @@
+# Loaded by scripts/run_xlt_meta.py. Indexed by SLURM_ARRAY_TASK_ID (or
+# --task-id for interactive testing).
+
+matrix:
+  - run_name: zs_eval
+  - run_name: zs_eval_bf16
+  - run_name: zs_eval_seq
+  - run_name: zs_eval_seq_bf16

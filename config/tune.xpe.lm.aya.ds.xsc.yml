@@ -39,7 +39,7 @@ peft:
     #
     ## PromptEncoderConfig(PromptLearningConfig): This is the configuration class to store the configuration of a [`PromptEncoder`].
     encoder_reparameterization_type: MLP # (Union[[`PromptEncoderReparameterizationType`], `str`]): The type of reparameterization to use. (MLP, LSTM)
-    encoder_hidden_size: 256 # (`int`): The hidden size of the prompt encoder.
+    encoder_hidden_size: 1024 # (`int`): The hidden size of the prompt encoder.
     encoder_num_layers: 2 # (`int`): The number of layers of the prompt encoder.
     encoder_dropout: 0.1 # (`float`): The dropout probability of the prompt encoder.
     #
@@ -114,8 +114,8 @@ eval:
 
 test:
     run: false
-    zero_shot: true
-    zero_shot_only: true
+    zero_shot: false
+    zero_shot_only: false
     save_predictions: false
     report_to_wandb: true
 
@@ -149,18 +149,10 @@ custom_training_args:
     - task_ids
     # Per-param-group LR/WD overrides. Substring-matched against
     # parameter names; unmatched groups log a warning and are skipped.
-    # Disabled — the XPE adapter trains at the top-level learning_rate.
-    # Re-enable to give the XPE input embedding a different LR than the
-    # MLP encoder (use 'xpe_embedding' for MLP encoder; 'embedding' to
-    # cover all prompt-encoder embeddings; see src/config_utils.py).
     # optimizer_grouped_parameters:
     # - param_name_parts:
     #     - xpe_embedding
     #   lr: 5e-5
-    #   weight_decay: 0.01
-    # - param_name_parts:
-    #     - shared_embedding
-    #   lr: 1e-6
     #   weight_decay: 0.01
 
 training_args:
@@ -172,7 +164,7 @@ training_args:
 
         # Batch Size
         per_device_train_batch_size: 16
-        gradient_accumulation_steps: 1
+        gradient_accumulation_steps: 2  # effective batch 32 (paper)
         per_device_eval_batch_size: 8
         eval_accumulation_steps: 1
 
@@ -199,12 +191,20 @@ training_args:
         metric_for_best_model: accuracy # specify the metric to determine the 'best' model
         greater_is_better: true # whether a larger metric value is better
 
-        # Optimizer
-        learning_rate: 1e-4
+        # Optimizer — Adafactor with fixed peak LR + external cosine schedule (paper-faithful)
+        optim: adafactor
+        optim_args:
+            beta1: null
+            decay_rate: -0.8
+            clip_threshold: 1.0
+            scale_parameter: false   # disable Adafactor's per-param LR rescaling
+            relative_step: false     # disable Adafactor's internal LR schedule (external cosine drives LR)
+            warmup_init: false       # only meaningful when relative_step=true
+        learning_rate: 5e-5
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2
-        warmup_ratio: 0.05
+        warmup_ratio: 0.1
         weight_decay: 0.01
         max_grad_norm: 1.0
 

@@ -4,32 +4,44 @@ Cross-Lingual Transfer (XLT) runner.
 Tunes LM on a concatenated source-language dataset (xstory_cloze / xsc),
 then tests per target language (belebele / bebe).
 
-Usage:
-    # Full pipeline (tune + test)
-    python -m scripts.run_xlt \
-        --tune-config ./config/tune.xpe.lm.bloom.ds.xsc.yml \
-        --test-config ./config/test.lm.bloom.ds.bebe.yml \
-        --source-langs ar,en \
-        --target-langs kat_Geor,eng_Latn \
-        --run-group smoke
+Three modes (CLI / library):
+  1. Tune-and-test  — pass --tune-config (CLI) / tune_config (lib).
+  2. Test only      — pass --adapter-uuid4 (the trained adapter; path
+                      lookup goes through MODEL's env/disk registry).
+                      You may pass --adapter-path together with the uuid to
+                      register the path in env; the path alone is rejected
+                      unless its basename encodes a uuid recoverable via
+                      MODEL.extract_uuid_from_name.
+  3. Zero-shot      — pass none of the above. The test phase runs against
+                      whatever model.pretrained.adapter the test config
+                      already specifies (typically `null` → base model).
 
-    # Test-only, from an existing source model path
-    python -m scripts.run_xlt \
-        --test-config ./config/test.lm.bloom.ds.bebe.yml \
-        --source-path "/fscratch/bmikaberidze/micm-nlp/exp/artefacts/models/bloom/bigscience/bloom-560m/mcqa_ftp/a6eb0f42-ba4e-478d-a93c-dd40f15714ab_bigscience|bloom-560m_2827473_1_mcqa|xstory_cloze_ftp|ar|tokenized|bigscience|bloom-560m_1_16" \
-        --source-langs ar,en \
-        --target-langs kat_Geor,eng_Latn \
-        --run-group smoke
+All XSC source languages: en,ru,zh,es,ar,hi,id,te,sw,eu,my
 
-    # Test-only, from an existing uuid4 (resolves via env-var registry or disk search)
-    python -m scripts.run_xlt \
-        ... --source-uuid4 <uuid>
+Examples:
+    # Tune-and-test
+    python -m scripts.run_xlt \\
+      --tune-config ./config/tune.xpe.lm.aya.ds.xsc.yml \\
+      --test-config ./config/test.lm.aya.ds.bebe.yml \\
+      --source-langs en,ru,zh,es,ar,hi,id \\
+      --target-langs kat_Geor,eng_Latn \\
+      --run-group xpe_aya
 
-    # Sequential per-lang test (debug; skip concat-predict bucketing)
+    # Test only, reusing a trained adapter
+    python -m scripts.run_xlt \\
+      --test-config ./config/test.lm.aya.ds.bebe.yml \\
+      --adapter-uuid4 <uuid> \\
+      --source-langs en,ru,zh,es,ar,hi,id \\
+      --run-group replay
+
+    # Zero-shot (base model from the test config)
+    python -m scripts.run_xlt \\
+      --test-config ./config/test.lm.aya.ds.bebe.yml \\
+      --source-langs en,ru,zh,es,ar,hi,id \\
+      --run-group zs
+
+    # Sequential per-lang test (writes one CSV row per lang as it completes)
     ... --sequential-test
-
-SLURM dual-mode: if SLURM_ARRAY_TASK_ID is in env, prod mode; else interactive —
-run_group is auto-prefixed with 'test_' and a fake SLURM_ARRAY_TASK_ID is set.
 """
 
 if __name__ == '__main__':
@@ -37,7 +49,6 @@ if __name__ == '__main__':
     micm_nlp_setup()
 
 import os
-import uuid
 import wandb
 import argparse
 import pandas as pd
@@ -60,29 +71,26 @@ SLURM_ARRAY_TASK_ID = 'SLURM_ARRAY_TASK_ID'
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--tune-config', type=str, default=None)
+    ap.add_argument('--tune-config', type=str, default=None,
+                    help='Path to tune YAML. If omitted and no --adapter-uuid4 is given, runs zero-shot.')
     ap.add_argument('--test-config', type=str, required=True)
-    ap.add_argument('--source-langs', type=str, required=True,
-                    help='Comma-separated xsc lang codes')
+    ap.add_argument('--source-langs', type=str, default='',
+                    help='Comma-separated xsc lang codes. Required for tune mode (used '
+                         'as the concatenated training source); optional for replay / '
+                         'zero-shot (used only as run-dir naming metadata).')
     ap.add_argument('--target-langs', type=str, default=None,
                     help='Comma-separated bebe lang codes; default: auto-discover from tokenized dirs')
     ap.add_argument('--run-group', type=str, required=True)
-    ap.add_argument('--source-path', type=str, default=None,
-                    help='Absolute path to tuned source_model; skip tune phase')
-    ap.add_argument('--source-uuid4', type=str, default=None,
-                    help='uuid4 of tuned model; skip tune, resolve via MODEL env/disk registry')
+    ap.add_argument('--adapter-uuid4', type=str, default=None,
+                    help='uuid4 of an existing trained adapter; skip tune, resolve path via env/disk registry')
+    ap.add_argument('--adapter-path', type=str, default=None,
+                    help='Absolute path to an existing adapter; the basename must encode the uuid '
+                         '(or pass --adapter-uuid4 alongside). Skips tune.')
     ap.add_argument('--sequential-test', action='store_true',
                     help='Run bebe langs one-by-one instead of concat-predict (debug)')
     ap.add_argument('--s-task-id', type=int, default=1,
                     help='Fake SLURM_ARRAY_TASK_ID for interactive mode')
-    args = ap.parse_args()
-
-    if args.source_path and args.source_uuid4:
-        ap.error('--source-path and --source-uuid4 are mutually exclusive')
-    skip_tune = bool(args.source_path or args.source_uuid4)
-    if not skip_tune and not args.tune_config:
-        ap.error('--tune-config is required unless --source-path or --source-uuid4 is given')
-    return args, skip_tune
+    return ap.parse_args()
 
 
 # --- Path / naming helpers --------------------------------------------------
@@ -95,22 +103,21 @@ def swap_lang_in_dirs(dirs_template: str, lang: str) -> str:
     return '/'.join(parts)
 
 
-def build_run_paths(tune_config, test_config, source_langs_sorted, run_group, s_task_id):
+def build_run_paths(tune_config, test_config, source_langs_sorted, run_group, slurm_task_id, interactive, run_name_tag=None):
     llm_config = tune_config if tune_config else test_config
     llm = llm_config.model.architecture
-    src_tag = '-'.join(source_langs_sorted)
+    src_tag = '-'.join(source_langs_sorted) if source_langs_sorted else 'zero'
 
-    if SLURM_ARRAY_TASK_ID not in os.environ:
-        os.environ[SLURM_ARRAY_TASK_ID] = str(s_task_id)
+    # Make the resolved task id visible to downstream code (TRAINER etc.)
+    # whether we're running under SLURM or interactively.
+    os.environ[SLURM_ARRAY_TASK_ID] = str(slurm_task_id)
+    if interactive:
         run_group = f'test_{run_group}'
 
-    ratio = None
-    if tune_config is not None and tune_config.peft is not None:
-        ratio = getattr(tune_config.peft, 'encoder_ratio', None)
-    run_name = f'{utils.get_time_id()}_{ratio}' if ratio is not None else utils.get_time_id()
+    time_id = utils.get_time_id()
+    run_name = f'{time_id}_{run_name_tag}' if run_name_tag else time_id
 
     run_dir = Path(evals_dir()) / 'xlt_runs' / llm / src_tag / run_group / run_name
-    # run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir, llm, src_tag, run_group, run_name
 
 
@@ -159,16 +166,23 @@ def tune_phase(tune_config, source_langs_sorted):
     return model.uuid4, model.path
 
 
-def wire_test_to_source_model(test_config, source_uuid4=None, source_path=None):
-    # Route #2: leave model.pretrained pointing at the base HF model from YAML
-    # and attach the trained source_model as an adapter, so PEFT.setup_model
-    # dispatches via PEFT.from_pretrained → load_xpe_pretrained.
-    if source_path: 
-        if not source_uuid4:
-            source_name = source_path.split('/')[-1]
-            source_uuid4 = MODEL.extract_uuid_from_name(source_name) or str(uuid.uuid4())
-        MODEL.store_path_by_uuid4_in_envs(source_uuid4, source_path)
-    test_config.model.pretrained.adapter = AdapterConfig(source='local', uuid4=source_uuid4)
+def wire_test_to_adapter(test_config, adapter_uuid4, adapter_path=None):
+    """Wire the test config's pretrained model to use a trained adapter.
+
+    `adapter_uuid4` is the canonical identity. If `adapter_path` is also
+    given, the path is registered in env vars under the uuid so the
+    toolkit's resolver can find it; otherwise the toolkit looks the uuid
+    up in its env/disk registry on its own.
+
+    Leaves model.pretrained pointing at the base HF model and attaches the
+    trained adapter via AdapterConfig, so PEFT.setup_model dispatches via
+    PEFT.from_pretrained → load_xpe_pretrained.
+    """
+    if not adapter_uuid4:
+        raise ValueError('adapter_uuid4 is required to wire an adapter')
+    if adapter_path:
+        MODEL.store_path_by_uuid4_in_envs(adapter_uuid4, adapter_path)
+    test_config.model.pretrained.adapter = AdapterConfig(source='local', uuid4=adapter_uuid4)
 
 
 def _extract_accuracy(metrics, lang=None):
@@ -232,8 +246,8 @@ def run_test_sequential(test_config, target_langs, csv_sink):
 class ResultsCSV:
     HEADER = [
         'run_name', 'run_group', 'llm', 'src_tag', 'source_langs', 'target_lang',
-        'accuracy', 'n', 'source_uuid4', 'source_path',
-        'tune_config', 'test_config',
+        'accuracy', 'n', 'adapter_uuid4', 'adapter_path',
+        'tune_config', 'test_config', 'meta_config',
     ]
 
     def __init__(self, path, meta):
@@ -248,28 +262,63 @@ class ResultsCSV:
         print(f'[xlt] wrote {self.path} ({len(self.rows)} rows)')
 
 
-# --- Main -------------------------------------------------------------------
+# --- Library entry point ----------------------------------------------------
 
 
-def main():
-    args, skip_tune = parse_args()
+def run_xlt(
+    *,
+    test_config,
+    source_langs,
+    run_group,
+    slurm_task_id: int,
+    interactive: bool = False,
+    run_name_tag: str | None = None,
+    tune_config=None,
+    target_langs=None,
+    adapter_uuid4: str | None = None,
+    adapter_path: str | None = None,
+    sequential_test=False,
+    tune_config_source='',
+    test_config_source='',
+    meta_config_source='',
+):
+    """
+    Run cross-lingual transfer with already-loaded CONFIG objects.
 
-    source_langs_sorted = sorted(x.strip() for x in args.source_langs.split(',') if x.strip())
+    Three modes (mutually exclusive):
+      tune_config given            → tune from scratch, then test the trained adapter.
+      adapter_uuid4 given          → skip tune, test the named adapter (path
+                                      registered in env via adapter_path if
+                                      supplied, else resolved by the toolkit).
+      neither given                → zero-shot. No tune, no adapter wiring;
+                                      the test config's existing
+                                      model.pretrained.adapter is used as-is.
 
-    tune_config = CONFIG.from_yaml(args.tune_config) if args.tune_config else None
-    test_config = CONFIG.from_yaml(args.test_config)
+    Caller owns task-id resolution: pass `slurm_task_id` as the resolved
+    integer. `interactive=True` prefixes the run_group with 'test_' to keep
+    interactive probes out of the prod artefacts namespace.
+    """
+    if tune_config is not None and adapter_uuid4:
+        raise ValueError('tune_config and adapter_uuid4 are mutually exclusive')
+    if adapter_path and not adapter_uuid4:
+        raise ValueError('adapter_path requires adapter_uuid4 to be set')
+
+    skip_tune = tune_config is None
+    zero_shot = skip_tune and not adapter_uuid4
+
+    source_langs_sorted = sorted(s.strip() for s in (source_langs or []) if s.strip())
+    if not skip_tune and not source_langs_sorted:
+        raise ValueError('source_langs is required for tune mode (the training set is built '
+                         'by concatenating per-lang datasets)')
 
     run_dir, llm, src_tag, run_group, run_name = build_run_paths(
-        tune_config, test_config, source_langs_sorted, args.run_group, args.s_task_id
+        tune_config, test_config, source_langs_sorted, run_group, slurm_task_id, interactive, run_name_tag
     )
     print(f'[xlt] run_dir={run_dir}')
 
-    if skip_tune:
-        source_uuid4 = args.source_uuid4
-        source_path = args.source_path
-    else:
-        source_uuid4, source_path = tune_phase(tune_config, source_langs_sorted)
-        print(f'[xlt] tuned: uuid4={source_uuid4} path={source_path}')
+    if not skip_tune:
+        adapter_uuid4, adapter_path = tune_phase(tune_config, source_langs_sorted)
+        print(f'[xlt] tuned: uuid4={adapter_uuid4} path={adapter_path}')
         run_dir.mkdir(parents=True, exist_ok=True)
         utils.dict_to_yaml_file({
             'run_name': run_name,
@@ -277,20 +326,15 @@ def main():
             'llm': llm,
             'src_tag': src_tag,
             'source_langs': ','.join(source_langs_sorted),
-            'source_uuid4': source_uuid4,
-            'source_path': str(source_path),
-            'tune_config': args.tune_config,
+            'adapter_uuid4': adapter_uuid4,
+            'adapter_path': str(adapter_path),
+            'tune_config': tune_config_source,
         }, str(run_dir / 'tune.yml'))
 
-    wire_test_to_source_model(
-        test_config,
-        source_uuid4=source_uuid4,
-        source_path=source_path if args.source_path else None,
-    )
+    if not zero_shot:
+        wire_test_to_adapter(test_config, adapter_uuid4=adapter_uuid4, adapter_path=adapter_path)
 
-    if args.target_langs:
-        target_langs = [x.strip() for x in args.target_langs.split(',') if x.strip()]
-    else:
+    if target_langs is None:
         target_langs = discover_target_langs(test_config)
     print(f'[xlt] target langs ({len(target_langs)}): {target_langs}')
 
@@ -300,19 +344,63 @@ def main():
         'llm': llm,
         'src_tag': src_tag,
         'source_langs': ','.join(source_langs_sorted),
-        'source_uuid4': source_uuid4 or '',
-        'source_path': source_path or '',
-        'tune_config': args.tune_config or '',
-        'test_config': args.test_config,
+        'adapter_uuid4': adapter_uuid4 or '',
+        'adapter_path': adapter_path or '',
+        'tune_config': tune_config_source,
+        'test_config': test_config_source,
+        'meta_config': meta_config_source,
     })
 
-    if args.sequential_test:
+    if sequential_test:
         run_test_sequential(test_config, target_langs, csv_sink)
     else:
         run_test_on_concat(test_config, target_langs, csv_sink)
 
     if wandb.run is not None:
         wandb.finish()
+
+
+# --- CLI Main ---------------------------------------------------------------
+
+
+def main():
+    args = parse_args()
+
+    # If the user passed --adapter-path without --adapter-uuid4, try to
+    # recover the uuid from the path basename (the dir is named uuid_..._...).
+    # No synthetic uuid fallback — fail loudly so the input gets fixed.
+    adapter_uuid4 = args.adapter_uuid4
+    if args.adapter_path and not adapter_uuid4:
+        adapter_uuid4 = MODEL.extract_uuid_from_name(args.adapter_path.split('/')[-1])
+        if not adapter_uuid4:
+            raise SystemExit(
+                f'--adapter-path basename does not encode a uuid; pass --adapter-uuid4 explicitly'
+            )
+
+    source_langs = [s.strip() for s in args.source_langs.split(',') if s.strip()]
+    target_langs = (
+        [s.strip() for s in args.target_langs.split(',') if s.strip()]
+        if args.target_langs else None
+    )
+    tune_config = CONFIG.from_yaml(args.tune_config) if args.tune_config else None
+    test_config = CONFIG.from_yaml(args.test_config)
+
+    # Direct CLI invocation = interactive run; SLURM array dispatch is the
+    # meta runner's job (scripts/run_xlt_meta.py owns task-id resolution).
+    run_xlt(
+        tune_config=tune_config,
+        test_config=test_config,
+        source_langs=source_langs,
+        target_langs=target_langs,
+        run_group=args.run_group,
+        slurm_task_id=args.s_task_id,
+        interactive=True,
+        adapter_uuid4=adapter_uuid4,
+        adapter_path=args.adapter_path,
+        sequential_test=args.sequential_test,
+        tune_config_source=args.tune_config or '',
+        test_config_source=args.test_config,
+    )
 
 
 if __name__ == '__main__':

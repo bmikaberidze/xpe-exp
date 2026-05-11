@@ -154,11 +154,11 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    optimizer_grouped_parameters:
-    - param_name_parts:
-        - dedicated_embeddings
-      lr: 5.0e-5
-      weight_decay: 0.01
+    # optimizer_grouped_parameters:
+    # - param_name_parts:
+    #     - xpe_embedding   # XPE-side input embedding (substring also avoids matching SPT-side `embedding`)
+    #   lr: 5.0e-5
+    #   weight_decay: 0.01
     # - param_name_parts:
     #     - shared_embedding
     #   lr: 1e-6

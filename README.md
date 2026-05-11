@@ -36,7 +36,8 @@ docker run --gpus all -it --rm -v $(pwd):/app -w /app xpe-exp bash
 
 ```
 config/   YAML experiment configs (FTP-reframed XSC + Belebele on BLOOM, AYA)
-src/      experiment-local helpers (config_utils, hub_upload)
+src/      experiment-local helpers (sib200_meta, hub_upload, utils)
+data/     committed reference data (e.g. sib200_meta.csv)
 scripts/  runners (run, run_xlt) + dataset prep, model utilities, eval analyses
 tests/    unit tests
 ```

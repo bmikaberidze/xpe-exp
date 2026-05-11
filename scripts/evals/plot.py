@@ -678,8 +678,7 @@ def extract_grouped_vocab_embedds(
             if isinstance(LANGUAGES, int):
                 configs = configs[:LANGUAGES]
             elif LANGUAGES == "seen":
-                # Import here to avoid top-level import cycles (see xpe_utils.py for seen SIB-200)
-                from src.config_utils import xlmr_seen_sib200_ds_names
+                from src.sib200_meta import xlmr_seen_sib200_ds_names
                 configs = xlmr_seen_sib200_ds_names
 
         if verbose: print(f"[INFO] Found {len(configs)} SIB-200 language configs.")

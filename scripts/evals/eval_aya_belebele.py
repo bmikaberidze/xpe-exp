@@ -37,8 +37,7 @@ def get_belebele_tasks(langs: list[str] | None = None) -> list[str]:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="CohereForAI/aya-expanse-8b")
-    parser.add_argument("--langs", type=str, default=None,
-                        help="Comma-separated language codes, e.g. kat_Geor,eng_Latn")
+    parser.add_argument("--langs", type=str, default=None, help="Comma-separated language codes, e.g. kat_Geor,eng_Latn")
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--output", type=str, default="artefacts/evals/aya-8b/belebele_zero_shot_eval_res.csv")
     parser.add_argument("--device", type=str, default="cuda")

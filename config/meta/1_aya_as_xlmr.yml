@@ -1,0 +1,37 @@
+# Cross-lingual transfer (XPE vs SPT vs dual) on aya-8b, xsc → bebe.
+#
+# Loaded by scripts/run_xlt_meta.py. Indexed by SLURM_ARRAY_TASK_ID (or
+# --task-id for interactive testing). Each matrix entry picks one base
+# tune config from `tune_configs` and applies in-memory overrides on top.
+
+tune_configs:
+  xpe:  ./config/tune.xpe.lm.aya.ds.xsc.yml
+  spt:  ./config/tune.spt.lm.aya.ds.xsc.yml
+  dual: ./config/tune.dual.lm.aya.ds.xsc.yml
+
+matrix:
+
+  # 0: Zero Shot Eval
+  - run_name: zero_shot_eval
+
+  # 1: XPE (MLP encoder, lr=5e-5)
+  - tune_method: xpe
+    run_name: xpe
+    overrides: {}
+
+  # 2: SPT (no encoder, lr=5e-3)
+  - tune_method: spt
+    run_name: spt
+    overrides: {}
+
+  # 3: dual at r=0.3 — 30% pseudo-soft (XPE-side, lr=5e-5) / 70% soft (SPT-side, lr=5e-3)
+  - tune_method: dual
+    run_name: d30
+    overrides:
+      peft.encoder_ratio: 0.3
+
+  # 4: dual at r=0.7 — 70% pseudo-soft (XPE-side, lr=5e-5) / 30% soft (SPT-side, lr=5e-3)
+  - tune_method: dual
+    run_name: d70
+    overrides:
+      peft.encoder_ratio: 0.7
