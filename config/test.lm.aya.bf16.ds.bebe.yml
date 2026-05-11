@@ -32,7 +32,7 @@ model:
     pretrained:
         cls: AutoModelForCausalLM
         args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
-            # torch_dtype: bfloat16
+            torch_dtype: bfloat16
             # device_map: auto
         name: CohereLabs/aya-expanse-8b
         source: huggingface # null | local | huggingface
@@ -110,8 +110,8 @@ data_collator:
 custom_training_args:
     # Sampling
     train_force_sequential: false
-    eval_force_sequential: false
-    test_force_sequential: false
+    eval_force_sequential: true
+    test_force_sequential: true
     # Batch Size
     train_max_batch_size: false
     eval_max_batch_size: true
@@ -193,7 +193,7 @@ training_args:
         # predict_with_generate: True  # Important for generation tasks
         full_determinism: false
         # remove_unused_columns: false  # KEEP all columns    
-        bf16: true
+        bf16: false
         # fp16_opt_level: O2
         fp16: false
 
