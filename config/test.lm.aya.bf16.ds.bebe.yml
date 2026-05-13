@@ -33,7 +33,7 @@ model:
         cls: AutoModelForCausalLM
         args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
             torch_dtype: bfloat16
-            # device_map: auto
+            # device_map: cuda # auto
         name: CohereLabs/aya-expanse-8b
         source: huggingface # null | local | huggingface
         checkpoint: null
@@ -116,10 +116,6 @@ custom_training_args:
     # replace with an int (e.g. 8192) to skip calibration on reruns.
     test_max_tokens_per_batch: auto
     eval_max_tokens_per_batch: auto
-    # Batch Size
-    train_max_batch_size: false
-    eval_max_batch_size: true
-    test_max_batch_size: true
     # Early Stopping
     early_stopping_after: 0.5 # Don’t allow early stopping before X% of total training steps.
     early_stopping_patience: 30

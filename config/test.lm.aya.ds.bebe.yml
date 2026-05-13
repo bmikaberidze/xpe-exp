@@ -116,10 +116,6 @@ custom_training_args:
     # replace with an int (e.g. 8192) to skip calibration on reruns.
     test_max_tokens_per_batch: auto
     eval_max_tokens_per_batch: auto
-    # Batch Size
-    train_max_batch_size: false
-    eval_max_batch_size: true
-    test_max_batch_size: true
     # Early Stopping
     early_stopping_after: 0.5 # Don’t allow early stopping before X% of total training steps.
     early_stopping_patience: 30
@@ -197,7 +193,7 @@ training_args:
         # predict_with_generate: True  # Important for generation tasks
         full_determinism: false
         # remove_unused_columns: false  # KEEP all columns    
-        bf16: true
+        bf16: false
         # fp16_opt_level: O2
         fp16: false
 

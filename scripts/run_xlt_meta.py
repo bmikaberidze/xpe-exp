@@ -57,6 +57,7 @@ Usage:
             "python -m scripts.run_xlt_meta \
                 --meta-config ./config/meta/0_zero_shot_eval.yml \
                 --test-config ./config/test.lm.aya.ds.bebe.yml"
+
     sbatch \
         --array=1 \
         runtime/clusters/pegasus/shell/run.sh --site-packages \
