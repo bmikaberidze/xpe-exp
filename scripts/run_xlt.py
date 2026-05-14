@@ -243,11 +243,20 @@ def run_test_sequential(test_config, target_langs, csv_sink):
 # --- CSV sink ---------------------------------------------------------------
 
 
+def _slurm_run_id() -> str:
+    """SLURM job id with array suffix when present: '2929287_1' or '2929287'."""
+    array_jid = os.environ.get('SLURM_ARRAY_JOB_ID')
+    array_tid = os.environ.get('SLURM_ARRAY_TASK_ID')
+    if array_jid and array_tid:
+        return f'{array_jid}_{array_tid}'
+    return os.environ.get('SLURM_JOB_ID', '')
+
+
 class ResultsCSV:
     HEADER = [
         'run_name', 'run_group', 'llm', 'src_tag', 'source_langs', 'target_lang',
         'accuracy', 'n', 'adapter_uuid4', 'adapter_path',
-        'tune_config', 'test_config', 'meta_config',
+        'tune_config', 'test_config', 'meta_config', 'slurm_run',
     ]
 
     def __init__(self, path, meta):
@@ -349,6 +358,7 @@ def run_xlt(
         'tune_config': tune_config_source,
         'test_config': test_config_source,
         'meta_config': meta_config_source,
+        'slurm_run': _slurm_run_id(),
     })
 
     if sequential_test:
