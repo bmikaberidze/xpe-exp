@@ -3,18 +3,19 @@ Reframe XStoryCloze dataset to FTP (First-Token Prediction) format.
 
 Each example becomes a single text sequence:
     <4 story sentences>
-    
-    A. <ending 1>
-    B. <ending 2>
-    Answer: <A or B>
 
-This mirrors the MMLU/BeleBele evaluation format used by lm-eval-harness,
-so training format aligns with evaluation.
+    A: <ending 1>
+    B: <ending 2>
+    Answer：<A or B>
 
-Note: we randomly choose 2 letters from A, B, C, and D per sample to represent <endings>, 
+Format mirrors lm-evaluation-harness's MCQA template byte-for-byte
+(colon-separated choices, fullwidth U+FF1A in `Answer：`, no trailing space),
+so XPE/FTP scoring lands on the same letter-token the harness scores.
+
+Note: we randomly choose 2 letters from A, B, C, and D per sample to represent <endings>,
 to align with Belebele's 4-option format.
 
-Usage: 
+Usage:
     python -m scripts.datasets.reframe_xsc_to_ftp
 """
 
@@ -30,7 +31,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 ALL_LABELS = ["A", "B", "C", "D"]
-RESPONSE_TEMPLATE = "Answer: "
+RESPONSE_TEMPLATE = "Answer："
 
 # XStoryCloze split mapping: original 'train' -> our 'validation', original 'eval' -> our 'train'
 SPLIT_MAPPING = {
@@ -52,7 +53,7 @@ def format_ftp_example(example, idx):
     labels = random.sample(ALL_LABELS, 2)
 
     choices_str = "\n".join(
-        f"{labels[i]}. {choice}"
+        f"{labels[i]}: {choice}"
         for i, choice in enumerate([example["sentence_quiz1"], example["sentence_quiz2"]])
     )
 

@@ -11,9 +11,8 @@ Bulk push (all configs):
 
 import logging
 import os
-from pathlib import Path
 
-from exps.xpe2.src.hub_upload import (
+from src.hub_upload import (
     discover_local_configs,
     ensure_repo,
     parse_args,
@@ -21,12 +20,10 @@ from exps.xpe2.src.hub_upload import (
     render_yaml_frontmatter,
     upload_card,
 )
-from exps.xpe2.src.utils import micm_nlp_setup
+from src.utils import micm_nlp_setup
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
-
-LOCAL_DIR = Path("/home/bmikaberidze/micm-nlp/exps/xpe2/artefacts/datasets/benchmarks/mcqa/xstory_cloze_ftp")
 # Public-facing names mirror upstream (juletxara/xstory_cloze) verbatim.
 # Used in the card YAML's `data_files`; on-disk splits are remapped via SPLIT_REMAP.
 SPLITS = ["train", "eval"]
@@ -98,7 +95,7 @@ def render_card(configs: list[str]) -> str:
     body = f"""# {PRETTY_NAME}
 
 A first-token-prediction (FTP) reframing of [juletxara/xstory_cloze](https://huggingface.co/datasets/juletxara/xstory_cloze).
-Each example is a single text sequence ending in `Answer: ` so a model can predict the answer as one token.
+Each example is a single text sequence ending in `Answer：` (fullwidth U+FF1A, no trailing space) so a model can predict the answer as one token. Format matches lm-evaluation-harness's MCQA template byte-for-byte.
 
 ## Format
 
@@ -110,9 +107,9 @@ Example (`en`):
 <sentence 3>
 <sentence 4>
 
-A. <ending 1>
-B. <ending 2>
-Answer: 
+A: <ending 1>
+B: <ending 2>
+Answer：
 ```
 
 **Schema:** `question_id: int`, `text: str`, `answer_label: str` (one of `A`/`B`/`C`/`D`).
@@ -124,7 +121,7 @@ Answer:
 ```python
 import random
 ALL_LABELS = ["A", "B", "C", "D"]
-RESPONSE_TEMPLATE = "Answer: "
+RESPONSE_TEMPLATE = "Answer："  # fullwidth U+FF1A, no trailing space
 
 def format_ftp_example(example, idx):
     context = "\\n".join([
@@ -135,7 +132,7 @@ def format_ftp_example(example, idx):
     ])
     labels = random.sample(ALL_LABELS, 2)  # 2-of-4, see note above
     choices_str = "\\n".join(
-        f"{{labels[i]}}. {{choice}}"
+        f"{{labels[i]}}: {{choice}}"
         for i, choice in enumerate([example["sentence_quiz1"], example["sentence_quiz2"]])
     )
     answer_label = labels[int(example["answer_right_ending"]) - 1]
@@ -173,15 +170,17 @@ This release inherits the upstream license (**CC-BY-4.0**, as declared by `julet
 
 def main() -> None:
     micm_nlp_setup()
+    from micm_nlp.path import datasets_dir
+    local_dir = datasets_dir() / "benchmarks" / "mcqa" / "xstory_cloze_ftp"
     args = parse_args()
     token = os.environ.get("HF_TOKEN")
     if not token:
         raise SystemExit("HF_TOKEN not set; export it (with `write` scope) and retry.")
 
-    available = discover_local_configs(LOCAL_DIR)
+    available = discover_local_configs(local_dir)
     if args.config:
         if args.config not in available:
-            raise SystemExit(f"--config {args.config!r} not found under {LOCAL_DIR}")
+            raise SystemExit(f"--config {args.config!r} not found under {local_dir}")
         configs_to_push = [args.config]
     else:
         configs_to_push = available
@@ -194,7 +193,7 @@ def main() -> None:
     for cfg in configs_to_push:
         try:
             logger.info("[%s] pushing...", cfg)
-            push_one_config(LOCAL_DIR, cfg, args.repo_id, split_remap=SPLIT_REMAP, token=token)
+            push_one_config(local_dir, cfg, args.repo_id, split_remap=SPLIT_REMAP, token=token)
             succeeded.append(cfg)
             logger.info("[%s] ok", cfg)
         except Exception as e:

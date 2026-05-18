@@ -11,7 +11,6 @@ Bulk push (all configs):
 
 import logging
 import os
-from pathlib import Path
 
 from src.hub_upload import (
     discover_local_configs,
@@ -25,8 +24,6 @@ from src.utils import micm_nlp_setup
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
-
-LOCAL_DIR = Path("/home/bmikaberidze/micm-nlp/exps/xpe2/artefacts/datasets/benchmarks/mcqa/belebele_ftp")
 # Belebele has only `test`; used to declare `data_files` in the card YAML.
 # On-disk splits load verbatim — `prepare_dataset` is called with split_remap=None.
 SPLITS = ["test"]
@@ -85,7 +82,7 @@ def render_card(configs: list[str]) -> str:
     body = f"""# {PRETTY_NAME}
 
 A first-token-prediction (FTP) reframing of [facebook/belebele](https://huggingface.co/datasets/facebook/belebele).
-Each example is a single text sequence ending in `Answer: ` so a model can predict the answer as one token (A/B/C/D).
+Each example is a single text sequence ending in `Answer：` (fullwidth U+FF1A, no trailing space) so a model can predict the answer as one token (A/B/C/D). Format matches lm-evaluation-harness's belebele template byte-for-byte.
 
 ## Format
 
@@ -94,11 +91,11 @@ Example (`eng_Latn`):
 ```
 P: <passage>
 Q: <question>
-A. <choice 1>
-B. <choice 2>
-C. <choice 3>
-D. <choice 4>
-Answer: 
+A: <choice 1>
+B: <choice 2>
+C: <choice 3>
+D: <choice 4>
+Answer：
 ```
 
 **Schema:** `question_id: int`, `text: str`, `answer_label: str` (one of `A`/`B`/`C`/`D`).
@@ -107,13 +104,13 @@ Answer:
 
 ```python
 ANSWER_LABELS = ["A", "B", "C", "D"]
-RESPONSE_TEMPLATE = "Answer: "
+RESPONSE_TEMPLATE = "Answer："  # fullwidth U+FF1A, no trailing space
 
 def format_ftp_example(example, idx):
     passage = f"P: {{example['flores_passage']}}"
     question = f"Q: {{example['question'].strip()}}"
     choices_str = "\\n".join(
-        f"{{ANSWER_LABELS[i]}}. {{example[f'mc_answer{{i + 1}}']}}"
+        f"{{ANSWER_LABELS[i]}}: {{example[f'mc_answer{{i + 1}}']}}"
         for i in range(4)
     )
     answer_label = ANSWER_LABELS[int(example["correct_answer_num"]) - 1]
@@ -144,15 +141,17 @@ This release inherits the upstream license (**CC-BY-SA-4.0**) and adds **no new 
 
 def main() -> None:
     micm_nlp_setup()
+    from micm_nlp.path import datasets_dir
+    local_dir = datasets_dir() / "benchmarks" / "mcqa" / "belebele_ftp"
     args = parse_args()
     token = os.environ.get("HF_TOKEN")
     if not token:
         raise SystemExit("HF_TOKEN not set; export it (with `write` scope) and retry.")
 
-    available = discover_local_configs(LOCAL_DIR)
+    available = discover_local_configs(local_dir)
     if args.config:
         if args.config not in available:
-            raise SystemExit(f"--config {args.config!r} not found under {LOCAL_DIR}")
+            raise SystemExit(f"--config {args.config!r} not found under {local_dir}")
         configs_to_push = [args.config]
     else:
         configs_to_push = available
@@ -165,7 +164,7 @@ def main() -> None:
     for cfg in configs_to_push:
         try:
             logger.info("[%s] pushing...", cfg)
-            push_one_config(LOCAL_DIR, cfg, args.repo_id, split_remap=None, token=token)
+            push_one_config(local_dir, cfg, args.repo_id, split_remap=None, token=token)
             succeeded.append(cfg)
             logger.info("[%s] ok", cfg)
         except Exception as e:

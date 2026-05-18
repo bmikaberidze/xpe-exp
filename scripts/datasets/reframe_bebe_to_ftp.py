@@ -4,14 +4,15 @@ Transform Belebele dataset to FTP (First-Token Prediction) format.
 Each example becomes a single text sequence:
     P: <passage>
     Q: <question>
-    A. <answer 1>
-    B. <answer 2>
-    C. <answer 3>
-    D. <answer 4>
-    Answer: <A, B, C, or D>
+    A: <answer 1>
+    B: <answer 2>
+    C: <answer 3>
+    D: <answer 4>
+    Answer：<A, B, C, or D>
 
-This mirrors the lm-eval-harness Belebele evaluation template,
-so training format aligns with evaluation.
+Format mirrors lm-evaluation-harness's belebele template byte-for-byte
+(colon-separated choices, fullwidth U+FF1A in `Answer：`, no trailing space),
+so XPE/FTP scoring lands on the same letter-token the harness scores.
 
 Usage:
     python -m scripts.datasets.reframe_bebe_to_ftp
@@ -28,7 +29,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 ANSWER_LABELS = ["A", "B", "C", "D"]
-RESPONSE_TEMPLATE = "Answer: "
+RESPONSE_TEMPLATE = "Answer："
 
 # Belebele only has 'test' split — we keep it as test
 SPLIT_MAPPING = {
@@ -42,7 +43,7 @@ def format_ftp_example(example, idx):
     question = f"Q: {example['question'].strip()}"
 
     choices_str = "\n".join(
-        f"{ANSWER_LABELS[i]}. {example[f'mc_answer{i + 1}']}"
+        f"{ANSWER_LABELS[i]}: {example[f'mc_answer{i + 1}']}"
         for i in range(4)
     )
 
