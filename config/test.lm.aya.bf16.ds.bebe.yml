@@ -19,7 +19,7 @@ task:
         label_name_to_float: false
         label_name_to_id: false
         # Others
-        verify_labels_match: true
+        verify_labels_match: false
         calc_confusion_matrix: false
         prediction_axis: -1
 

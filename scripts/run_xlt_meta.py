@@ -50,7 +50,9 @@ Usage:
         --target-langs kat_Geor,eng_Latn \
         --target-langs shn_Mymr \
         --task-id 0    
-          
+                
+    =====
+    
     sbatch \
         --array=0 \
         runtime/clusters/pegasus/shell/run.sh --site-packages \
@@ -64,6 +66,9 @@ Usage:
             "python -m scripts.run_xlt_meta \
                 --meta-config ./config/meta/0_zero_shot_eval.yml \
                 --test-config ./config/test.lm.aya.bf16.ds.bebe.yml"
+
+    =====
+
     sbatch \
         --array=2 \
         runtime/clusters/pegasus/shell/run.sh --site-packages \
