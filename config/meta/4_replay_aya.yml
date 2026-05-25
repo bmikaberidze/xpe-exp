@@ -1,0 +1,35 @@
+# Replay (test-only) of already-trained XPE and SPT adapters on bebe.
+# Skips the tune phase entirely — the adapter_uuid4 + adapter_path fields
+# tell run_xlt_meta to register the path under the uuid in env vars and let
+# the toolkit's resolver pick it up at test time. No tune_configs section
+# because no entry has `tune_method`.
+#
+# These two adapters came out of the failed 3_full_aya run (SLURM job
+# 2955994) — both tunes completed; only the bebe test phase OOMed before
+# raw.csv could be written. Now that:
+#   - test configs set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+#   - micm_nlp/training/batching.py _HEADROOM lowered to 0.80
+# the test phase should fit on A100-80GB.
+#
+# Dispatch (interactive single entry first to confirm):
+#   python -m scripts.run_xlt_meta \
+#       --meta-config ./config/meta/4_replay_aya.yml \
+#       --test-config ./config/test.lm.aya.ds.bebe.yml \
+#       --source-langs en,ru,zh,es,ar,hi,id \
+#       --target-langs kat_Geor,eng_Latn \
+#       --task-id 0
+#
+# Source-langs is optional in replay mode (used only for run-dir naming);
+# pass it to keep the existing src_tag convention.
+
+matrix:
+
+  # 0: XPE @ paper LR (5e-5) — adapter from 3_full_aya task_id=0
+  - run_name: replay_xpe_lr5e5
+    adapter_uuid4: 75f83d86-f8a4-48bf-85b8-04c38ce54abe
+    adapter_path: /fscratch/bmikaberidze/xpe-exp/artefacts/models/aya/CohereLabs/aya-expanse-8b/mcqa_ftp/75f83d86-f8a4-48bf-85b8-04c38ce54abe_CohereLabs|aya-expanse-8b_2955996_0_mcqa|xstory_cloze_ftp|en|tokenized|CohereLabs|aya-expanse-8b_10_32
+
+  # 1: SPT @ paper LR (5e-3) — adapter from 3_full_aya task_id=1
+  - run_name: replay_spt_lr5e3
+    adapter_uuid4: 1ed0635f-8f9f-47af-ad78-ee63fa6a14d0
+    adapter_path: /fscratch/bmikaberidze/xpe-exp/artefacts/models/aya/CohereLabs/aya-expanse-8b/mcqa_ftp/1ed0635f-8f9f-47af-ad78-ee63fa6a14d0_CohereLabs|aya-expanse-8b_2955994_1_mcqa|xstory_cloze_ftp|en|tokenized|CohereLabs|aya-expanse-8b_10_32

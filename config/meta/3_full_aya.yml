@@ -1,0 +1,39 @@
+
+# LR calibration on aya-8b: XPE vs SPT, full real (non-smoke) tune.
+
+# Start with two entries at the middle (paper-default) LRs:
+#   xpe @ 5e-5 (set in tune.xpe.lm.aya.ds.xsc.yml directly)
+#   spt @ 5e-3 (set in tune.spt.lm.aya.ds.xsc.yml directly)
+# Each entry uses the tune config's LR as-is — no overrides — so this file
+# also serves as a "full valid healthy pipeline" check before we expand the
+# matrix into a real LR grid.
+
+# Expansion plan (when ready to actually search):
+#   xpe: {1e-5, 1e-4} via overrides.training_args.args.learning_rate
+#   spt: {1e-3, 1e-2} via overrides.training_args.args.learning_rate
+# → 6 entries total, factor-of-10 spacing around paper anchors.
+
+# Dispatch (interactive single entry first to confirm):
+#   python -m scripts.run_xlt_meta \
+#       --meta-config ./config/meta/3_full_aya.yml \
+#       --test-config ./config/test.lm.aya.ds.bebe.yml \
+#       --source-langs en,ru,zh,es,ar,hi,id \
+#       --target-langs kat_Geor,eng_Latn \
+#       --task-id 0
+
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.aya.ds.xsc.yml
+  spt: ./config/tune.spt.lm.aya.ds.xsc.yml
+
+matrix:
+
+  # 0: XPE at paper LR (5e-5)
+  - tune_method: xpe
+    run_name: xpe_lr5e5
+    overrides: {}
+
+  # 1: SPT at paper LR (5e-3)
+  - tune_method: spt
+    run_name: spt_lr5e3
+    overrides: {}

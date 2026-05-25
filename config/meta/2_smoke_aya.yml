@@ -1,0 +1,38 @@
+# Smoke verification of the XLT loop on aya-8b: tune → adapter saved → test
+# loads adapter → results.csv written. Uses the smoke tune variants
+# (1% subset, 1 epoch, grad_checkpoint, low-memory batching) so each entry
+# finishes in minutes per source lang. NOT a calibration — just pipeline
+# integrity per method.
+#
+# Loaded by scripts/run_xlt_meta.py. Indexed by SLURM_ARRAY_TASK_ID (or
+# --task-id for interactive testing). Each matrix entry picks one base
+# smoke tune config from `tune_configs` and applies in-memory overrides.
+
+tune_configs:
+  xpe:  ./config/tune.smoke.xpe.lm.aya.bf16.ds.xsc.yml
+  spt:  ./config/tune.smoke.spt.lm.aya.bf16.ds.xsc.yml
+  dual: ./config/tune.smoke.dual.lm.aya.bf16.ds.xsc.yml
+
+matrix:
+
+  # 0: XPE (MLP encoder, lr=5e-5)
+  - tune_method: xpe
+    run_name: smoke_xpe
+    overrides: {}
+
+  # 1: SPT (no encoder, lr=5e-3)
+  - tune_method: spt
+    run_name: smoke_spt
+    overrides: {}
+
+  # 2: dual at r=0.3 — 30% pseudo-soft (XPE-side, lr=5e-5) / 70% soft (SPT-side, lr=5e-3)
+  - tune_method: dual
+    run_name: smoke_d30
+    overrides:
+      peft.encoder_ratio: 0.3
+
+  # 3: dual at r=0.7 — 70% pseudo-soft (XPE-side, lr=5e-5) / 30% soft (SPT-side, lr=5e-3)
+  - tune_method: dual
+    run_name: smoke_d70
+    overrides:
+      peft.encoder_ratio: 0.7
