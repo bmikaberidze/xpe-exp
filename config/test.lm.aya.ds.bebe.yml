@@ -19,7 +19,7 @@ task:
         label_name_to_float: false
         label_name_to_id: false
         # Others
-        verify_labels_match: false
+        verify_labels_match: true
         calc_confusion_matrix: false
         prediction_axis: -1
 
@@ -59,7 +59,7 @@ tokenizer:
 ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
-    dirs: mcqa/belebele_ftp/ell_Grek/tokenized|CohereLabs|aya-expanse-8b
+    dirs: mcqa/belebele_ftp/eng_Latn/tokenized|CohereLabs|aya-expanse-8b
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     comes_with_splits: 
@@ -205,7 +205,12 @@ cuda:
 env:
 
     # CUDA_LAUNCH_BLOCKING: '1'
-    PYTORCH_CUDA_ALLOC_CONF: null # max_split_size_mb:128
+    # expandable_segments uses CUDA virtual-memory APIs so segments grow on
+    # demand from a reserved virtual range, defragmenting around large
+    # cross-entropy logits (vocab=256k × budget tokens × 4B in fp32). Needed
+    # because the auto token-budget calibrator's headroom can be eaten by
+    # cumulative fragmentation during the bebe test sweep.
+    PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
 
     # huggingface/tokenizers: The current process just got forked, after parallelism has already been used. 
     # Disabling parallelism to avoid deadlocks...

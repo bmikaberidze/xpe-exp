@@ -58,8 +58,9 @@ model:
     pretrained:
         cls: AutoModelForCausalLM
         args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
-            torch_dtype: bfloat16
-            device_map: auto
+            # fp32 weights for paper-faithful XPE/SPT/dual training (smoke variants use bf16).
+            # torch_dtype: bfloat16
+            # device_map: auto
         name: CohereLabs/aya-expanse-8b
         source: huggingface # null | local | huggingface
         checkpoint: null
@@ -85,7 +86,7 @@ tokenizer:
 ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
-    dirs: mcqa/xstory_cloze_ftp/ar/tokenized|CohereLabs|aya-expanse-8b
+    dirs: mcqa/xstory_cloze_ftp/en/tokenized|CohereLabs|aya-expanse-8b
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     comes_with_splits:
@@ -161,11 +162,11 @@ training_args:
     args:
         # Epochs
         num_train_epochs: 10  # ignored at runtime — max_steps overrides — but the toolkit's config wrapper expects this key to be present
-        max_steps: 6000
+        max_steps: 4000
 
         # Batch Size
-        per_device_train_batch_size: 16
-        gradient_accumulation_steps: 2  # effective batch 32 (paper)
+        per_device_train_batch_size: 8
+        gradient_accumulation_steps: 4  # effective batch 32 (paper); reduced micro-batch from 16 to fit aya-8b fp32 + activations + 256k-vocab fp32 logits on 80 GB H100
         per_device_eval_batch_size: 8
         eval_accumulation_steps: 1
 
@@ -177,11 +178,11 @@ training_args:
 
         # Evaluation
         eval_strategy: steps  # "steps" or "epoch" for evaluation at the end of each epoch
-        eval_steps: 500  # How often to run evaluation during training
+        eval_steps: 100  # How often to run evaluation during training
 
         # Saving
         save_strategy: steps # no / steps / epoch / best
-        save_steps: 500
+        save_steps: 100
         save_total_limit: 1
         save_safetensors: true
         overwrite_output_dir: true
@@ -234,7 +235,7 @@ cuda:
 env:
 
     # CUDA_LAUNCH_BLOCKING: '1'
-    PYTORCH_CUDA_ALLOC_CONF: null # max_split_size_mb:128
+    PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True' # max_split_size_mb:128
 
     # huggingface/tokenizers: The current process just got forked, after parallelism has already been used.
     # Disabling parallelism to avoid deadlocks...
