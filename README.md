@@ -79,7 +79,7 @@ python -m scripts.run --config ./config/tune.xpe.lm.aya.ds.xsc.yml
 
 # Smoke variants — 1% subset, 1 epoch — for fast end-to-end verification
 python -m scripts.run --config ./config/tune.smoke.xpe.lm.bloom.ds.xsc.yml
-python -m scripts.run --config ./config/tune.smoke.xpe.lm.aya.ds.xsc.yml
+python -m scripts.run --config ./config/tune.smoke.xpe.lm.aya.bf16.ds.xsc.yml
 ```
 
 Each run logs to W&B (set `WANDB_API_KEY` in `.env`, or flip `report_to: none` in the config for offline). For aya-8b on a single 48 GB GPU, the configs use `torch_dtype: bfloat16` + `device_map: auto` so weights stream directly to the GPU instead of buffering in CPU RAM (avoids cgroup OOM under tight SLURM allocations).

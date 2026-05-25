@@ -46,8 +46,10 @@ Usage:
 
    python -m scripts.run_xlt_meta \
         --meta-config ./config/meta/0_zero_shot_eval.yml \
-        --test-config ./config/test.lm.aya.ds.bebe.yml \
+        --test-config ./config/test.lm.aya.bf16.ds.bebe.yml \
         --target-langs kat_Geor,eng_Latn \
+        --sequential-test
+
         --target-langs shn_Mymr \
         --task-id 0    
                 
@@ -96,6 +98,25 @@ Usage:
         --source-langs en,ru,zh,es,ar,hi,id \
         --target-langs kat_Geor,eng_Latn \
         --task-id 0
+
+    sbatch \
+        --array=0,1 \
+        runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/3_full_aya.yml \
+            --test-config ./config/test.lm.aya.ds.bebe.yml \
+            --source-langs en,ru,zh,es,ar,hi,id \
+            --target-langs kat_Geor,eng_Latn"
+    
+    sbatch \
+      --array=0,1 \
+      runtime/clusters/pegasus/shell/run.sh --site-packages \
+      "python -m scripts.run_xlt_meta \
+          --meta-config ./config/meta/4_replay_aya.yml \
+          --test-config ./config/test.lm.aya.ds.bebe.yml \
+          --source-langs en,ru,zh,es,ar,hi,id \
+          --target-langs kat_Geor,eng_Latn"
+        
 """
 
 if __name__ == '__main__':
