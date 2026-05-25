@@ -44,7 +44,7 @@ peft:
     encoder_dropout: 0.1 # (`float`): The dropout probability of the prompt encoder.
     #
     ## CrossPromptEncoderConfig(PromptEncoderConfig): This is the configuration class to store the configuration of a [`CrossPromptEncoder`].
-    encoder_ratio: 1
+    encoder_ratio: 0.3
     encoder_input_size: null
     encoder_init_state_dict_path: null
     encoder_freeze: false
@@ -85,7 +85,7 @@ tokenizer:
 ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
-    dirs: mcqa/xstory_cloze_ftp/ar/tokenized|CohereLabs|aya-expanse-8b
+    dirs: mcqa/xstory_cloze_ftp/en/tokenized|CohereLabs|aya-expanse-8b
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     comes_with_splits:
@@ -101,7 +101,7 @@ ds:
     task_id: null
         # key: task_ids
         # standardize_key: false
-    preproc_rules: 
+    preproc_rules:
         subset:
             run: true
             use: 0.01 # Use only (X*100)% of the dataset
@@ -151,15 +151,13 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # optimizer_grouped_parameters:
-    # - param_name_parts:
-    #     - xpe_embedding   # XPE-side input embedding (substring also avoids matching SPT-side `embedding`)
-    #   lr: 5e-5
-    #   weight_decay: 0.01
-    # - param_name_parts:
-    #     - shared_embedding
-    #   lr: 1e-6
-    #   weight_decay: 0.01
+    # XPE-side encoder/head gets paper LR + wd; SPT-side soft prompt inherits global lr=5e-3, wd=0.0.
+    optimizer_grouped_parameters:
+    - param_name_parts:
+        - xpe_embedding
+        - xpe_head
+      lr: 5e-5
+      weight_decay: 0.01
 
 training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
@@ -202,13 +200,13 @@ training_args:
         metric_for_best_model: accuracy # specify the metric to determine the 'best' model
         greater_is_better: true # whether a larger metric value is better
 
-        # Optimizer
-        learning_rate: 5e-5
+        # Optimizer — global covers SPT-side soft prompt (paper: lr=5e-3, no wd); XPE-side encoder/head gets lr=5e-5, wd=0.01 via optimizer_grouped_parameters override.
+        learning_rate: 5e-3
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2
         warmup_ratio: 0.05
-        weight_decay: 0.01
+        weight_decay: 0.0
         max_grad_norm: 1.0
 
         # Dataloader
