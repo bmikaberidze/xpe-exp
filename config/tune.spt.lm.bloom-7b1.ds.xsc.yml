@@ -1,0 +1,244 @@
+mode: finetune # preprocess | train | finetune | evaluate | test
+
+task:
+    id: null
+    category: text_generation
+    name: mcqa_ftp # multi choice question answering by first token prediction
+    metric_groups:
+    - metrics:
+        - accuracy
+    preproc_rules:
+        # Token Classification
+        flatten: true
+        filter_padded: true
+        label_id_to_name: false
+        filter_by_prefixes: false
+        # Text To Text
+        decode: false
+        label_name_strip_lower: false
+        label_name_to_float: false
+        label_name_to_id: false
+        # Others
+        verify_labels_match: true
+        calc_confusion_matrix: false
+        prediction_axis: -1
+
+peft:
+    #
+    ## PeftConfig(PeftConfigMixin): This is the base configuration class to store the configuration of a [`PeftModel`].
+    peft_type: XPE # (Union[[`~peft.utils.config.PeftType`], `str`]): The type of Peft method to use.
+    task_type: CAUSAL_LM # (Union[[`~peft.utils.config.TaskType`], `str`]): The type of task to perform.
+    # inference_mode: False # (`bool`, defaults to `False`): Whether to use the Peft model in inference mode.
+    #
+    ## PromptLearningConfig(PeftConfig): This is the base configuration class to store the configuration of [`PrefixTuning`], [`PromptEncoder`], or [`PromptTuning`].
+    num_virtual_tokens: 20 # (`int`): The number of virtual tokens to use.
+    # token_dim: # (`int`): The hidden embedding dimension of the base transformer model.
+    # num_transformer_submodules: # (`int`): The number of transformer submodules in the base transformer model.
+    # num_attention_heads: # (`int`): The number of attention heads in the base transformer model.
+    # num_layers: # (`int`): The number of layers in the base transformer model.
+    #
+    ## PromptEncoderConfig(PromptLearningConfig): This is the configuration class to store the configuration of a [`PromptEncoder`].
+    encoder_reparameterization_type: NONE # (Union[[`PromptEncoderReparameterizationType`], `str`]): The type of reparameterization to use. (MLP, LSTM)
+    encoder_hidden_size: 1024 # (`int`): The hidden size of the prompt encoder.
+    encoder_num_layers: 2 # (`int`): The number of layers of the prompt encoder.
+    encoder_dropout: 0.1 # (`float`): The dropout probability of the prompt encoder.
+    #
+    ## CrossPromptEncoderConfig(PromptEncoderConfig): This is the configuration class to store the configuration of a [`CrossPromptEncoder`].
+    encoder_ratio: 0
+    encoder_input_size: null
+    encoder_init_state_dict_path: null
+    encoder_freeze: false
+    encoder_embedding_freeze: false
+    encoder_embedding_init_type: hf_default # hf_default | xavier_uniform | xavier_normal
+    encoder_embedding_normalize: null # null | unit | clip
+    encoder_embedding_normalize_max_norm: null
+
+model:
+    architecture: bloom
+    pretrained:
+        cls: AutoModelForCausalLM
+        args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
+            # fp32 weights for paper-faithful XPE/SPT/dual training (smoke variants use bf16).
+            # torch_dtype: bfloat16
+            # device_map: auto
+        name: bigscience/bloom-7b1
+        source: huggingface # null | local | huggingface
+        checkpoint: null
+        adapter: null
+    # For TRAIN (from scratch), use `init:` instead of `pretrained:`, e.g.:
+    # init:
+    #     cls: BertForMaskedLM        # optional override; else arch-derived
+    #     config:
+    #         cls: BertConfig         # optional override; else arch-derived
+    #         args:                   # splatted into the *Config ctor (vocab_size is injected by trainer)
+    #             hidden_size: 768
+    #             num_hidden_layers: 12
+
+tokenizer:
+    source: huggingface # local | huggingface
+    name: bigscience/bloom-7b1
+    type: null # null | wordpiece | sentpiece
+    algorithm: null
+    adapt_to_lm: false
+    args:
+        padding_side: right
+
+ds:
+    descriptive_name: null
+    category: benchmarks # benchmarks | corpora | collections | raw
+    dirs: mcqa/xstory_cloze_ftp/en/tokenized|bigscience|bloom-7b1
+    name: null
+    type: huggingface_saved # text | csv | huggingface_saved | huggingface
+    comes_with_splits:
+        train: true
+        test: false
+        validation: true
+    input:
+        key: text
+        standardize_key: true
+    label:
+        key: answer_label
+        standardize_key: true
+    task_id: null
+        # key: task_ids
+        # standardize_key: false
+    preproc_rules: null
+
+eval:
+    before_training: false
+    before_training_on_test: false
+    during_training: null
+    after_training: false
+    after_training_on_test: false
+    per_task: null
+    downstream_tasks: false
+
+test:
+    run: false
+    zero_shot: false
+    zero_shot_only: false
+    save_predictions: false
+    report_to_wandb: true
+
+trainer:
+    cls: Trainer # Trainer | Seq2SeqTrainer
+
+data_collator:
+    cls: DataCollatorForSeq2Seq
+    args:
+        max_length: 1024
+        padding: 'longest' # true or longest | max_length | false
+        pad_to_multiple_of: 4
+        return_tensors: pt
+
+custom_training_args:
+    # Sampling
+    train_force_sequential: false
+    eval_force_sequential: true
+    test_force_sequential: true
+    # Early Stopping
+    early_stopping_after: 0.5 # Don't allow early stopping before X% of total training steps.
+    early_stopping_patience: 5
+    early_stopping_threshold: 0.0
+    # Final Model Saving
+    save_final_model: true
+    keep_only_final_model: true
+    # Random Task Exclusion
+    random_task_exclusion: false
+    # Do not remove in _remove_unused_columns
+    usable_columns:
+    - task_ids
+    # Per-param-group LR/WD overrides. Substring-matched against
+    # parameter names; unmatched groups log a warning and are skipped.
+    # optimizer_grouped_parameters:
+    # - param_name_parts:
+    #     - embedding   # SPT-side soft prompt (ratio=0 → only self.embedding exists)
+    #   lr: 5e-3
+    #   weight_decay: 0.0
+
+training_args:
+    cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
+    args:
+        # Epochs
+        num_train_epochs: 10  # ignored at runtime — max_steps overrides — but the toolkit's config wrapper expects this key to be present
+        max_steps: 4000
+
+        # Batch Size
+        per_device_train_batch_size: 8
+        gradient_accumulation_steps: 4  # effective batch 32 (paper); reduced micro-batch from 16 to fit aya-8b fp32 + activations + 256k-vocab fp32 logits on 80 GB H100
+        per_device_eval_batch_size: 8
+        eval_accumulation_steps: 1
+
+        # Logging
+        logging_strategy: steps # steps
+        logging_first_step: false
+        logging_steps: 50
+        report_to: wandb # wandb | none
+
+        # Evaluation
+        eval_strategy: steps  # "steps" or "epoch" for evaluation at the end of each epoch
+        eval_steps: 100  # How often to run evaluation during training
+
+        # Saving
+        save_strategy: steps # no / steps / epoch / best
+        save_steps: 100
+        save_total_limit: 1
+        save_safetensors: true
+        overwrite_output_dir: true
+        push_to_hub: false
+
+        # Loading Best Model
+        load_best_model_at_end: true # the best model (in terms of evaluation metric) is loaded at the end of training
+        metric_for_best_model: accuracy # specify the metric to determine the 'best' model
+        greater_is_better: true # whether a larger metric value is better
+
+        # Optimizer — Adafactor with fixed peak LR + external cosine schedule (paper-faithful)
+        optim: adafactor
+        optim_args:
+            beta1: null
+            decay_rate: -0.8
+            clip_threshold: 1.0
+            scale_parameter: false   # disable Adafactor's per-param LR rescaling
+            relative_step: false     # disable Adafactor's internal LR schedule (external cosine drives LR)
+            warmup_init: false       # only meaningful when relative_step=true
+        learning_rate: 5e-3
+        lr_scheduler_type: cosine_with_restarts
+        lr_scheduler_kwargs:
+            num_cycles: 2
+        warmup_ratio: 0.1
+        weight_decay: 0.0  # SPT soft prompt: paper says no wd for the prompt embeddings
+        max_grad_norm: 1.0
+
+        # Dataloader
+        # dataloader_num_workers: 4 # default: 4 - Number of workers for the dataloader
+        # dataloader_pin_memory: true # default: True - Whether to pin memory for the dataloader
+        # dataloader_persistent_workers: true # default: False - Whether to use persistent workers for the dataloader
+
+        # Grouping
+        group_by_length: true # Whether to group samples by length or not while batching
+        length_column_name: length
+
+        # Others
+        # predict_with_generate: True  # Important for generation tasks
+        full_determinism: false
+        # remove_unused_columns: false  # KEEP all columns
+        bf16: true
+        # fp16_opt_level: O2
+        fp16: false
+
+cuda:
+    empty_cache_steps: null
+
+# While loading configuration
+# this parameters are added to the environment variables
+env:
+
+    # CUDA_LAUNCH_BLOCKING: '1'
+    PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True' # max_split_size_mb:128
+
+    # huggingface/tokenizers: The current process just got forked, after parallelism has already been used.
+    # Disabling parallelism to avoid deadlocks...
+    # To disable this warning, you can either:
+    #         - Avoid using `tokenizers` before the fork if possible
+    #         - Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+    TOKENIZERS_PARALLELISM: 'true' # 'true' | 'false'

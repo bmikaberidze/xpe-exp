@@ -1,0 +1,70 @@
+# LR sensitivity search on bloom-7b1: XPE × {5e-6, 5e-5, 5e-4} + SPT × {5e-4, 5e-3, 5e-2}.
+# Entry 0 is the zero-shot baseline (base bloom-7b1, no adapter) — the source of
+# truth all tuned variants are measured against. Entries 1-6 are the LR grid:
+# symmetric factor-of-10 spacing around the paper anchors (5e-5 for XPE, 5e-3 for SPT).
+# Tuned entries share the tune-config-as-base; only training_args.args.learning_rate
+# is overridden per entry. Selection metric is eval_loss (LossEarlyStoppingCallback
+# watches it; metric_for_best_model=accuracy still loads the best-accuracy checkpoint
+# at end, so the saved adapter is the strongest one within the eval_loss-driven horizon).
+#
+# Dispatch (zero-shot baseline first — no tune, fast):
+#   python -m scripts.run_xlt_meta \
+#       --meta-config ./config/meta/6_lr_search_bloom.yml \
+#       --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+#       --source-langs en,ru,zh,es,ar,hi,id \
+#       --target-langs kat_Geor,eng_Latn \
+#       --task-id 0
+#
+# Full array (0 = zero-shot, 1-6 = LR grid):
+#   sbatch --array=0-6 runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/6_lr_search_bloom.yml \
+#         --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+#         --source-langs en,ru,zh,es,ar,hi,id \
+#         --target-langs kat_Geor,eng_Latn"
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.bloom-7b1.ds.xsc.yml
+  spt: ./config/tune.spt.lm.bloom-7b1.ds.xsc.yml
+
+matrix:
+
+  # 0: Zero-shot baseline — base bloom-7b1, no adapter (source of truth).
+  #    No tune_method / adapter_uuid4 → run_xlt tests the test config's model as-is.
+  - run_name: zero_shot
+
+  # 1: XPE lr=5e-6 (one OOM below paper anchor)
+  - tune_method: xpe
+    run_name: xpe_lr5e6
+    overrides:
+      training_args.args.learning_rate: 5.0e-6
+
+  # 2: XPE lr=5e-5 (paper anchor)
+  - tune_method: xpe
+    run_name: xpe_lr5e5
+    overrides:
+      training_args.args.learning_rate: 5.0e-5
+
+  # 3: XPE lr=5e-4 (one OOM above paper anchor)
+  - tune_method: xpe
+    run_name: xpe_lr5e4
+    overrides:
+      training_args.args.learning_rate: 5.0e-4
+
+  # 4: SPT lr=5e-4 (one OOM below paper anchor)
+  - tune_method: spt
+    run_name: spt_lr5e4
+    overrides:
+      training_args.args.learning_rate: 5.0e-4
+
+  # 5: SPT lr=5e-3 (paper anchor)
+  - tune_method: spt
+    run_name: spt_lr5e3
+    overrides:
+      training_args.args.learning_rate: 5.0e-3
+
+  # 6: SPT lr=5e-2 (one OOM above paper anchor)
+  - tune_method: spt
+    run_name: spt_lr5e2
+    overrides:
+      training_args.args.learning_rate: 5.0e-2

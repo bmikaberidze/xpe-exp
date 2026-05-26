@@ -7,7 +7,7 @@ task:
 
 tokenizer:
     source: huggingface # local | huggingface
-    name: bigscience/bloom-560m
+    name: bigscience/bloom-7b1
     type: null # null | wordpiece | sentpiece
     algorithm: null
     adapt_to_lm: false
