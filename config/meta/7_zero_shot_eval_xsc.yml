@@ -1,0 +1,51 @@
+# Zero-shot baseline on the XSC (xStoryCloze) *validation* split, to gauge
+# whether aya-expanse-8b / bloom-7b1 are worth finetuning on this data at all.
+#
+# Both entries are zero-shot (no tune_configs, no adapter): run_xlt tests the
+# eval-config's base model as-is. The eval configs alias the validation split
+# into the test role (comes_with_splits.test: validation), so the normal test
+# phase scores validation data.
+#
+# PAIRING CONSTRAINT: the model comes from --test-config, NOT from the matrix
+# entry — run_name only labels the run. So the two models need TWO separate
+# invocations (a single SLURM --array=0-1 with one --test-config would run the
+# same model twice). Pair each --task-id with its matching eval config:
+#   task-id 0 (zs_xsc_aya)   <- ./config/test.lm.aya.ds.xsc.yml
+#   task-id 1 (zs_xsc_bloom) <- ./config/test.lm.bloom-7b1.ds.xsc.yml
+#
+# --target-langs: XSC source langs present on disk (en,ru,zh,es,ar,hi,id);
+# omit to auto-discover all 11 XSC langs.
+#
+# Interactive (one model at a time):
+#   python -m scripts.run_xlt_meta \
+#       --meta-config ./config/meta/7_zero_shot_eval_xsc.yml \
+#       --test-config ./config/test.lm.aya.ds.xsc.yml \
+#       --target-langs en,ru,zh,es,ar,hi,id \
+#       --task-id 0
+#
+#   python -m scripts.run_xlt_meta \
+#       --meta-config ./config/meta/7_zero_shot_eval_xsc.yml \
+#       --test-config ./config/test.lm.bloom-7b1.ds.xsc.yml \
+#       --target-langs en,ru,zh,es,ar,hi,id \
+#       --task-id 1
+#
+# SLURM (one sbatch per model — index pinned to the matching config):
+#   sbatch --array=0 runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/7_zero_shot_eval_xsc.yml \
+#         --test-config ./config/test.lm.aya.ds.xsc.yml \
+#         --target-langs en,ru,zh,es,ar,hi,id"
+#
+#   sbatch --array=1 runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/7_zero_shot_eval_xsc.yml \
+#         --test-config ./config/test.lm.bloom-7b1.ds.xsc.yml \
+#         --target-langs en,ru,zh,es,ar,hi,id"
+
+matrix:
+
+  # 0: aya-expanse-8b zero-shot on XSC validation (base model, no adapter).
+  - run_name: zs_xsc_aya
+
+  # 1: bloom-7b1 zero-shot on XSC validation (base model, no adapter).
+  - run_name: zs_xsc_bloom

@@ -69,9 +69,9 @@ Train / fine-tune / evaluate / test via the unified runner, configured by YAML. 
 python -m scripts.run --config ./config/test.lm.bloom.ds.bebe.yml
 python -m scripts.run --config ./config/test.lm.aya.ds.bebe.yml
 
-# Zero-shot eval on XStoryCloze validation
-python -m scripts.run --config ./config/eval.lm.bloom.ds.xsc.yml
-python -m scripts.run --config ./config/eval.lm.aya.ds.xsc.yml
+# Zero-shot eval on XStoryCloze validation (validation aliased into the test role)
+python -m scripts.run --config ./config/test.lm.bloom-7b1.ds.xsc.yml
+python -m scripts.run --config ./config/test.lm.aya.ds.xsc.yml
 
 # Tune XPE on XSC (full)
 python -m scripts.run --config ./config/tune.xpe.lm.bloom.ds.xsc.yml

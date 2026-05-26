@@ -1,4 +1,4 @@
-mode: evaluate # preprocess | train | finetune | evaluate | test
+mode: test # preprocess | train | finetune | evaluate | test
 
 task:
     id: null
@@ -23,18 +23,18 @@ task:
         calc_confusion_matrix: false
         prediction_axis: -1
 
-peft: 
+peft:
     peft_type: null
     task_type: null
 
 model:
-    architecture: bloom
+    architecture: aya
     pretrained:
         cls: AutoModelForCausalLM
         args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
-            # torch_dtype: bfloat16
+            # torch_dtype: bfloat16  # left off: fp32 load + auto token-budget calibrator (see custom_training_args)
             # device_map: auto
-        name: bigscience/bloom-560m
+        name: CohereLabs/aya-expanse-8b
         source: huggingface # null | local | huggingface
         checkpoint: null
         adapter: null
@@ -49,7 +49,7 @@ model:
 
 tokenizer:
     source: huggingface # local | huggingface
-    name: bigscience/bloom-560m
+    name: CohereLabs/aya-expanse-8b
     type: null # null | wordpiece | sentpiece
     algorithm: null
     adapt_to_lm: false
@@ -59,12 +59,16 @@ tokenizer:
 ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
-    dirs: mcqa/xstory_cloze_ftp/ar/tokenized|bigscience|bloom-560m
+    dirs: mcqa/xstory_cloze_ftp/ar/tokenized|CohereLabs|aya-expanse-8b
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
+    # Zero-shot eval on the XSC *validation* split: alias validation into the
+    # test role (test: validation) so run_xlt's test phase scores it directly.
+    # Mirror of the bebe test config's `validation: test`. (XSC ships only
+    # train + validation; there is no native test split.)
     comes_with_splits:
         train: true
-        test: false
+        test: validation
         validation: true
     input:
         key: text
@@ -87,7 +91,7 @@ eval:
     downstream_tasks: false
 
 test:
-    run: false
+    run: true
     zero_shot: true
     zero_shot_only: true
     save_predictions: false
@@ -97,11 +101,10 @@ trainer:
     cls: Trainer # Trainer | Seq2SeqTrainer
 
 data_collator:
-    # We use DataCollatorForSeq2Seq instead of DataCollatorForLanguageModeling,
-    # because, unlike standard CausalLM setups, we provide the collator with
-    # custom labels that require padding.
     cls: DataCollatorForSeq2Seq
     args:
+        # XSC (xStoryCloze) sequences are short; 1024 comfortably covers them.
+        # padding='longest' means real per-batch memory tracks the longest sample.
         max_length: 1024
         padding: 'longest' # true or longest | max_length | false
         pad_to_multiple_of: 4
@@ -110,8 +113,12 @@ data_collator:
 custom_training_args:
     # Sampling
     train_force_sequential: false
-    eval_force_sequential: true
-    test_force_sequential: true
+    eval_force_sequential: false
+    test_force_sequential: false
+    # Variable-size batching: 'auto' calibrates per-GPU at job start;
+    # replace with an int (e.g. 8192) to skip calibration on reruns.
+    test_max_tokens_per_batch: auto
+    eval_max_tokens_per_batch: auto
     # Early Stopping
     early_stopping_after: 0.5 # Don't allow early stopping before X% of total training steps.
     early_stopping_patience: 30
@@ -124,27 +131,23 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    optimizer_grouped_parameters:
-    - param_name_parts:
-        - dedicated_embeddings
-      lr: 5.0e-5
-      weight_decay: 0.01
+    # optimizer_grouped_parameters:  # unused for zero-shot eval (no training)
     # - param_name_parts:
-    #     - shared_embedding
-    #   lr: 1e-6
+    #     - dedicated_embeddings
+    #   lr: 5e-5
     #   weight_decay: 0.01
 
 training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
     args:
         # Epochs
-        num_train_epochs: 1
+        num_train_epochs: 10
         # max_steps: 6000
 
         # Batch Size
-        per_device_train_batch_size: 16
+        per_device_train_batch_size: 32
         gradient_accumulation_steps: 1
-        per_device_eval_batch_size: 32
+        per_device_eval_batch_size: 4 # inert under eval_max_tokens_per_batch: auto (calibrator sets effective batch)
         eval_accumulation_steps: 1
 
         # Logging
@@ -171,7 +174,7 @@ training_args:
         greater_is_better: true # whether a larger metric value is better
 
         # Optimizer
-        learning_rate: 5.0e-5
+        learning_rate: 5e-5
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2
@@ -192,7 +195,7 @@ training_args:
         # predict_with_generate: True  # Important for generation tasks
         full_determinism: false
         # remove_unused_columns: false  # KEEP all columns
-        bf16: true
+        bf16: false
         # fp16_opt_level: O2
         fp16: false
 
@@ -204,7 +207,11 @@ cuda:
 env:
 
     # CUDA_LAUNCH_BLOCKING: '1'
-    PYTORCH_CUDA_ALLOC_CONF: null # max_split_size_mb:128
+    # expandable_segments uses CUDA virtual-memory APIs so segments grow on
+    # demand from a reserved virtual range, defragmenting around large
+    # cross-entropy logits. Mirrors the bebe test config; matters once the
+    # auto token-budget calibrator's headroom is eaten by fragmentation.
+    PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
 
     # huggingface/tokenizers: The current process just got forked, after parallelism has already been used.
     # Disabling parallelism to avoid deadlocks...
