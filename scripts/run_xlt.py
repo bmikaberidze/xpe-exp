@@ -49,7 +49,9 @@ if __name__ == '__main__':
     micm_nlp_setup()
 
 import os
+import gc
 import wandb
+import torch
 import argparse
 import pandas as pd
 from pathlib import Path
@@ -238,6 +240,17 @@ def run_test_sequential(test_config, target_langs, csv_sink):
             'accuracy': _extract_accuracy(pred_out.metrics),
             'n': len(ds.test),
         })
+        # Release this lang's model/trainer before building the next one.
+        # Without this, the next iteration's MODEL() + TRAINER() (whose
+        # __init__ calibrates the eval token budget via a forward pass)
+        # runs while the previous 7B model is still GPU-resident, so two
+        # models coexist and calibration OOMs on lang #2. gc.collect()
+        # breaks the Trainer<->model reference cycles; empty_cache() returns
+        # the freed blocks to the allocator so calibration sees them.
+        del trainer, model, output, pred_out, ds
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 # --- CSV sink ---------------------------------------------------------------
