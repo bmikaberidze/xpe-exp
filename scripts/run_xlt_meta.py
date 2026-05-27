@@ -120,17 +120,19 @@ Usage:
     =====
     BLOOM
 
-    python -m scripts.run_xlt_meta \
-        --meta-config ./config/meta/6_lr_search_bloom.yml \
-        --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
-        --task-id 0
+    sbatch --array=0 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/6_lr_search_bloom.yml \
+            --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+            --sequential-test"
 
-    sbatch --array=0-6 runtime/clusters/pegasus/shell/run.sh --site-packages \
+    sbatch --array=1-6 runtime/clusters/pegasus/shell/run.sh --site-packages \
         "python -m scripts.run_xlt_meta \
             --meta-config ./config/meta/6_lr_search_bloom.yml \
             --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
             --source-langs en,ru,zh,es,ar,hi,id"
-        
+    
+    squeue -u bmikaberidze -l
 """
 
 if __name__ == '__main__':
