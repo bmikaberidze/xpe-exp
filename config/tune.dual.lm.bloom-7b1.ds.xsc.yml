@@ -22,6 +22,9 @@ task:
         verify_labels_match: true
         calc_confusion_matrix: false
         prediction_axis: -1
+        # lm-eval-harness multiple_choice style: argmax over the ds.label.names
+        # answer-label tokens only, instead of full-vocab argmax.
+        label_restricted_likelihood: true
 
 peft:
     #
@@ -99,6 +102,7 @@ ds:
     label:
         key: answer_label
         standardize_key: true
+        names: [A, B, C, D]  # candidate answer labels (single source of truth)
     task_id: null
         # key: task_ids
         # standardize_key: false
