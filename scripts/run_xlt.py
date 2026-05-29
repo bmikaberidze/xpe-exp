@@ -225,32 +225,59 @@ def run_test_on_concat(test_config, target_langs, csv_sink):
         })
 
 
+def _log_gpu_mem(tag: str) -> None:
+    """Print live (allocated) vs cached (reserved) GPU memory.
+
+    Across a sequential sweep this distinguishes the two failure modes:
+    allocated climbing lang-over-lang => a real leak (a lingering reference
+    keeps a prior model alive); reserved climbing while allocated stays flat
+    => allocator fragmentation (empty_cache not returning expandable segments).
+    """
+    if not torch.cuda.is_available():
+        return
+    gib = 2 ** 30
+    print(f'[xlt][mem] {tag}: '
+          f'allocated={torch.cuda.memory_allocated() / gib:.2f}GiB '
+          f'reserved={torch.cuda.memory_reserved() / gib:.2f}GiB')
+
+
 def run_test_sequential(test_config, target_langs, csv_sink):
     for lang in target_langs:
+        _log_gpu_mem(f'before {lang}')
         per_lang = test_config.model_copy(deep=True)
         per_lang.ds.dirs = swap_lang_in_dirs(test_config.ds.dirs, lang)
-        tokenizer = load_tokenizer(per_lang)
-        ds = DATASET(per_lang)
-        model = MODEL(per_lang)
-        trainer = TRAINER(model, ds, tokenizer)
-        output = trainer.run()
-        pred_out = output.zero_shot or output.full_shot
-        csv_sink.add({
-            'target_lang': lang,
-            'accuracy': _extract_accuracy(pred_out.metrics),
-            'n': len(ds.test),
-        })
-        # Release this lang's model/trainer before building the next one.
-        # Without this, the next iteration's MODEL() + TRAINER() (whose
-        # __init__ calibrates the eval token budget via a forward pass)
-        # runs while the previous 7B model is still GPU-resident, so two
-        # models coexist and calibration OOMs on lang #2. gc.collect()
-        # breaks the Trainer<->model reference cycles; empty_cache() returns
-        # the freed blocks to the allocator so calibration sees them.
-        del trainer, model, output, pred_out, ds
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        # Pre-bind so the finally block can del them unconditionally even if
+        # construction raises partway through.
+        tokenizer = ds = model = trainer = output = pred_out = None
+        try:
+            tokenizer = load_tokenizer(per_lang)
+            ds = DATASET(per_lang)
+            model = MODEL(per_lang)
+            trainer = TRAINER(model, ds, tokenizer)
+            output = trainer.run()
+            pred_out = output.zero_shot or output.full_shot
+            csv_sink.add({
+                'target_lang': lang,
+                'accuracy': _extract_accuracy(pred_out.metrics),
+                'n': len(ds.test),
+            })
+        except Exception as e:
+            # One bad lang (e.g. calibration OOM) must not kill the whole
+            # 122-lang sweep: record an empty row and move on.
+            print(f'[xlt][warn] lang {lang} failed: {type(e).__name__}: {e}')
+            csv_sink.add({'target_lang': lang, 'accuracy': None, 'n': None})
+        finally:
+            # Release this lang's model/trainer before building the next one.
+            # Without this, the next iteration's MODEL() + TRAINER() (whose
+            # __init__ calibrates the eval token budget via a forward pass)
+            # runs while the previous 7B model is still GPU-resident, so two
+            # models coexist and calibration OOMs. gc.collect() breaks the
+            # Trainer<->model reference cycles; empty_cache() returns the freed
+            # blocks to the allocator so the next calibration sees them.
+            del trainer, model, output, pred_out, ds, tokenizer
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
 
 # --- CSV sink ---------------------------------------------------------------
