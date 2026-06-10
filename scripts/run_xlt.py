@@ -49,6 +49,7 @@ if __name__ == '__main__':
     micm_nlp_setup()
 
 import os
+import re
 import gc
 import wandb
 import torch
@@ -82,6 +83,13 @@ def parse_args():
                          'zero-shot (used only as run-dir naming metadata).')
     ap.add_argument('--target-langs', type=str, default=None,
                     help='Comma-separated bebe lang codes; default: auto-discover from tokenized dirs')
+    ap.add_argument('--fold', type=int, default=None,
+                    help='Belebele self-split fold index; rewrites the config ds.dirs '
+                         "'fold<N>' segment. Omit for fold-less datasets (xstory_cloze).")
+    ap.add_argument('--seed', type=int, default=None,
+                    help='Pin the training seed (shared across methods → paired '
+                         'comparison; recorded in raw.csv). Omit to let the toolkit '
+                         'randomize per run.')
     ap.add_argument('--run-group', type=str, required=True)
     ap.add_argument('--adapter-uuid4', type=str, default=None,
                     help='uuid4 of an existing trained adapter; skip tune, resolve path via env/disk registry')
@@ -100,9 +108,52 @@ def parse_args():
 
 def swap_lang_in_dirs(dirs_template: str, lang: str) -> str:
     # ds.dirs shape: '<category_group>/<benchmark>/<lang>/tokenized|<vendor>|<model>'
+    # (Belebele fold dirs add a 'fold<N>' segment after <lang>; <lang> stays at
+    # index 2, so this swap is unaffected by the fold segment.)
     parts = dirs_template.split('/')
     parts[2] = lang
     return '/'.join(parts)
+
+
+_FOLD_SEG = re.compile(r'fold\d+')
+
+
+def apply_fold(dirs_template: str, fold: int | None) -> str:
+    """Aim a Belebele self-split config at a specific fold at runtime.
+
+    Belebele fold dirs carry a literal 'fold<N>' segment, e.g.
+    '.../eng_Latn/fold0/tokenized|...'. With `fold` given, that segment is
+    rewritten to 'fold<fold>'. `fold=None` is a no-op (leaves the config's
+    literal default, and leaves fold-less paths like xstory_cloze untouched).
+    Passing a fold to a fold-less path is a user error and raises.
+    """
+    if fold is None:
+        return dirs_template
+    parts = dirs_template.split('/')
+    for i, part in enumerate(parts):
+        if _FOLD_SEG.fullmatch(part):
+            parts[i] = f'fold{fold}'
+            return '/'.join(parts)
+    raise ValueError(
+        f"--fold={fold} given but ds.dirs has no 'fold<N>' segment: '{dirs_template}'"
+    )
+
+
+def apply_seed(tune_config, seed: int | None) -> None:
+    """Pin the training seed in the tune config so it's shared across methods.
+
+    Sharing one seed set across XPE/SPT/DUAL makes method comparison paired
+    (same shuffle order, prompt init, dropout per seed), so seed variance
+    cancels out. `seed=None` is a no-op — the toolkit then randomizes per run
+    (runner.py). Mutates `tune_config` in place; no-op when it's None
+    (zero-shot / adapter-replay have no tune phase).
+    """
+    if seed is None or tune_config is None:
+        return
+    ta = tune_config.training_args
+    if getattr(ta, 'args', None) is None:
+        ta.args = _Flex()
+    ta.args.seed = seed
 
 
 def build_run_paths(tune_config, test_config, source_langs_sorted, run_group, slurm_task_id, interactive, run_name_tag=None):
@@ -126,11 +177,13 @@ def build_run_paths(tune_config, test_config, source_langs_sorted, run_group, sl
 def discover_target_langs(test_config):
     parts = test_config.ds.dirs.split('/')
     benchmark_rel = '/'.join(parts[:2])
-    tok_suffix = parts[3]
+    # Everything after the <lang> segment (parts[2]) is the per-lang subpath.
+    # 4-part xsc => 'tokenized|...'; 5-part bebe fold => 'fold<N>/tokenized|...'.
+    lang_subpath = '/'.join(parts[3:])
     search_root = Path(datasets_dir()) / test_config.ds.category / benchmark_rel
     langs = []
     for lang_dir in sorted(search_root.iterdir()):
-        if (lang_dir / tok_suffix).is_dir():
+        if (lang_dir / lang_subpath).is_dir():
             langs.append(lang_dir.name)
     return langs
 
@@ -165,7 +218,11 @@ def tune_phase(tune_config, source_langs_sorted):
     model = MODEL(tune_config)
     trainer = TRAINER(model, dataset, tokenizer)
     trainer.run()
-    return model.uuid4, model.path
+    # Capture the seed the HF Trainer actually used. The toolkit randomizes it
+    # per run (runner.py) unless training_args.full_determinism is set, so this
+    # is the only record of which seed produced this adapter.
+    seed = getattr(getattr(getattr(trainer, 'trainer', None), 'args', None), 'seed', None)
+    return model.uuid4, model.path, seed
 
 
 def wire_test_to_adapter(test_config, adapter_uuid4, adapter_path=None):
@@ -294,7 +351,8 @@ def _slurm_run_id() -> str:
 
 class ResultsCSV:
     HEADER = [
-        'run_name', 'run_group', 'llm', 'src_tag', 'source_langs', 'target_lang',
+        'run_name', 'run_group', 'llm', 'src_tag', 'fold', 'seed',
+        'source_langs', 'target_lang',
         'accuracy', 'n', 'adapter_uuid4', 'adapter_path',
         'tune_config', 'test_config', 'meta_config', 'slurm_run',
     ]
@@ -324,6 +382,8 @@ def run_xlt(
     run_name_tag: str | None = None,
     tune_config=None,
     target_langs=None,
+    fold: int | None = None,
+    seed: int | None = None,
     adapter_uuid4: str | None = None,
     adapter_path: str | None = None,
     sequential_test=False,
@@ -355,6 +415,20 @@ def run_xlt(
     skip_tune = tune_config is None
     zero_shot = skip_tune and not adapter_uuid4
 
+    # Aim both configs at the requested Belebele fold (no-op when fold is None
+    # or the path has no 'fold<N>' segment-free dirs left as-is).
+    test_config.ds.dirs = apply_fold(test_config.ds.dirs, fold)
+    if tune_config is not None:
+        tune_config.ds.dirs = apply_fold(tune_config.ds.dirs, fold)
+    if fold is not None:
+        print(f'[xlt] fold={fold} -> test dirs={test_config.ds.dirs}')
+
+    # Pin the training seed (no-op when None → toolkit randomizes). Sharing one
+    # seed across methods makes the XPE/SPT/DUAL comparison paired.
+    apply_seed(tune_config, seed)
+    if seed is not None:
+        print(f'[xlt] seed={seed} pinned on tune config')
+
     source_langs_sorted = sorted(s.strip() for s in (source_langs or []) if s.strip())
     if not skip_tune and not source_langs_sorted:
         raise ValueError('source_langs is required for tune mode (the training set is built '
@@ -365,15 +439,18 @@ def run_xlt(
     )
     print(f'[xlt] run_dir={run_dir}')
 
+    seed_used = None
     if not skip_tune:
-        adapter_uuid4, adapter_path = tune_phase(tune_config, source_langs_sorted)
-        print(f'[xlt] tuned: uuid4={adapter_uuid4} path={adapter_path}')
+        adapter_uuid4, adapter_path, seed_used = tune_phase(tune_config, source_langs_sorted)
+        print(f'[xlt] tuned: uuid4={adapter_uuid4} path={adapter_path} seed={seed_used}')
         run_dir.mkdir(parents=True, exist_ok=True)
         utils.dict_to_yaml_file({
             'run_name': run_name,
             'run_group': run_group,
             'llm': llm,
             'src_tag': src_tag,
+            'fold': fold,
+            'seed': seed_used,
             'source_langs': ','.join(source_langs_sorted),
             'adapter_uuid4': adapter_uuid4,
             'adapter_path': str(adapter_path),
@@ -392,6 +469,8 @@ def run_xlt(
         'run_group': run_group,
         'llm': llm,
         'src_tag': src_tag,
+        'fold': '' if fold is None else fold,
+        'seed': '' if seed_used is None else seed_used,
         'source_langs': ','.join(source_langs_sorted),
         'adapter_uuid4': adapter_uuid4 or '',
         'adapter_path': adapter_path or '',
@@ -442,6 +521,8 @@ def main():
         test_config=test_config,
         source_langs=source_langs,
         target_langs=target_langs,
+        fold=args.fold,
+        seed=args.seed,
         run_group=args.run_group,
         slurm_task_id=args.s_task_id,
         interactive=True,

@@ -131,7 +131,91 @@ Usage:
             --meta-config ./config/meta/6_lr_search_bloom.yml \
             --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
             --source-langs en,ru,zh,es,ar,hi,id"
-    
+
+    =====
+    Inlingual BLOOM
+    sbatch --array=3,5 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/6_lr_search_bloom.yml \
+            --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+            --source-langs en \
+            --target-langs eng_Latn"
+
+    sbatch --array=3,5 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/6_lr_search_bloom.yml \
+            --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+            --source-langs es \
+            --target-langs spa_Latn"
+
+    sbatch --array=3,5 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/6_lr_search_bloom.yml \
+            --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+            --source-langs zh \
+            --target-langs zho_Hans"
+
+    sbatch --array=3,5 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/6_lr_search_bloom.yml \
+            --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+            --source-langs ru \
+            --target-langs rus_Cyrl"
+
+    sbatch --array=3,5 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/6_lr_search_bloom.yml \
+            --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+            --source-langs ar \
+            --target-langs arb_Arab"
+
+    sbatch --array=3,5 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/6_lr_search_bloom.yml \
+            --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+            --source-langs hi \
+            --target-langs hin_Deva"
+
+    sbatch --array=3,5 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/6_lr_search_bloom.yml \
+            --test-config ./config/test.lm.bloom-7b1.ds.bebe.yml \
+            --source-langs id \
+            --target-langs ind_Latn"
+
+    =====
+    BeBe to BeBe
+
+    python -m scripts.run_xlt_meta \
+        --meta-config ./config/meta/0_zero_shot_eval.yml \
+        --test-config ./config/test.lm.bloomz-7b1.ds.bebe.yml \
+        --target-langs eng_Latn,spa_Latn,zho_Hans,arb_Arab,hin_Deva,rus_Cyrl,deu_Latn
+        
+    python -m scripts.run_xlt_meta \
+        --meta-config ./config/meta/0_zero_shot_eval.yml \
+        --test-config ./config/test.lm.bloomz-7b1.ds.bebe.yml \
+        --task-id 2 --sequential-test
+        
+    sbatch --array=2 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/0_zero_shot_eval.yml \
+            --test-config ./config/test.lm.bloomz-7b1.ds.bebe.yml \
+            --sequential-test"
+            
+    sbatch --array=2 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/0_zero_shot_eval.yml \
+            --test-config ./config/test.lm.bloomz-7b1.ds.bebe.yml \
+            --sequential-test \
+            --fold 0"
+
+    sbatch --array=1-2 runtime/clusters/pegasus/shell/run.sh --site-packages \
+        "python -m scripts.run_xlt_meta \
+            --meta-config ./config/meta/8_bebe_self_split_bloomz.yml \
+            --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
+            --source-langs eng_Latn,spa_Latn,fra_Latn,zho_Hans,hin_Deva,arb_Arab,ind_Latn \
+            --fold 0"
+
     squeue -u bmikaberidze -l
 """
 
@@ -212,6 +296,12 @@ def parse_args():
                     help='Comma-separated xsc lang codes. Required for tune mode; '
                          'optional for replay / zero-shot (run-dir naming only).')
     ap.add_argument('--target-langs', type=str, default=None, help='Comma-separated bebe lang codes; default: auto-discover')
+    ap.add_argument('--fold', type=int, default=None,
+                    help="Belebele self-split fold index; rewrites the tune+test config ds.dirs "
+                         "'fold<N>' segment. Omit for fold-less datasets (xstory_cloze).")
+    ap.add_argument('--seed', type=int, default=None,
+                    help='Pin the training seed (shared across methods → paired '
+                         'comparison; recorded in raw.csv). Omit to randomize per run.')
     ap.add_argument('--sequential-test', action='store_true')
     ap.add_argument('--task-id', type=int, default=None, help='Force matrix index for interactive testing of a single entry. '
                                                               'Ignored when SLURM_ARRAY_TASK_ID is set (real array dispatch wins).')
@@ -295,6 +385,8 @@ def main():
         test_config=test_config,
         source_langs=source_langs,
         target_langs=target_langs,
+        fold=args.fold,
+        seed=args.seed,
         run_group=run_group,
         slurm_task_id=task_id,
         interactive=interactive,

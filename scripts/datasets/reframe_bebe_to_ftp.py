@@ -51,6 +51,12 @@ def format_ftp_example(example, idx):
 
     return {
         "question_id": idx,
+        # Stable parallel identity carried as provenance: (link, question_number)
+        # is unique per item and identical across all 122 language configs,
+        # unlike the per-language positional question_id. Downstream fold
+        # splitting keys on these; reframe itself stays fold-agnostic.
+        "link": example["link"],
+        "question_number": example["question_number"],
         "text": f"{passage}\n{question}\n{choices_str}\n{RESPONSE_TEMPLATE}",
         "answer_label": answer_label,
     }

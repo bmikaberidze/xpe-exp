@@ -31,28 +31,22 @@ peft:
     task_type: null
 
 model:
-    architecture: aya
+    architecture: bloom
     pretrained:
         cls: AutoModelForCausalLM
         args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
             # torch_dtype: bfloat16
             # device_map: auto
-        name: CohereLabs/aya-expanse-8b
+        # BLOOMZ-7b1: instruction-tuned BLOOM, byte-for-byte same tokenizer as
+        # bloom-7b1 (so the `tokenized|bigscience|bloom-7b1` dirs are reused).
+        name: bigscience/bloomz-7b1
         source: huggingface # null | local | huggingface
         checkpoint: null
         adapter: null
-    # For TRAIN (from scratch), use `init:` instead of `pretrained:`, e.g.:
-    # init:
-    #     cls: BertForMaskedLM        # optional override; else arch-derived
-    #     config:
-    #         cls: BertConfig         # optional override; else arch-derived
-    #         args:                   # splatted into the *Config ctor (vocab_size is injected by trainer)
-    #             hidden_size: 768
-    #             num_hidden_layers: 12
 
 tokenizer:
     source: huggingface # local | huggingface
-    name: CohereLabs/aya-expanse-8b
+    name: bigscience/bloom-7b1
     type: null # null | wordpiece | sentpiece
     algorithm: null
     adapt_to_lm: false
@@ -62,7 +56,11 @@ tokenizer:
 ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
-    dirs: mcqa/belebele_ftp/eng_Latn/tokenized|CohereLabs|aya-expanse-8b
+    # Belebele fold TEST split (300 item-disjoint held-out items). `fold0` is the
+    # literal default; run_xlt_meta's `--fold N` swaps this segment (parts[3]) to
+    # fold{N}. Distinct from test.lm.bloomz-7b1.ds.bebe.yml, which points at the
+    # unfolded root (900) for the zero-shot baseline.
+    dirs: mcqa/belebele_ftp/eng_Latn/fold0/tokenized|bigscience|bloom-7b1
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     comes_with_splits:
@@ -92,8 +90,8 @@ eval:
 
 test:
     run: true
-    zero_shot: true
-    zero_shot_only: true
+    zero_shot: false
+    zero_shot_only: false
     save_predictions: false
     report_to_wandb: true
 
@@ -132,12 +130,6 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # optimizer_grouped_parameters:
-    # - param_name_parts:
-    #     - xpe_embeddings
-    #     - xpe_head
-    #   lr: 5e-5
-    #   weight_decay: 0.01
 
 training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
@@ -183,42 +175,19 @@ training_args:
         warmup_ratio: 0.05
         weight_decay: 0.01
         max_grad_norm: 1.0
-    
-        # Dataloader
-        # dataloader_num_workers: 4 # default: 4 - Number of workers for the dataloader
-        # dataloader_pin_memory: true # default: True - Whether to pin memory for the dataloader
-        # dataloader_persistent_workers: true # default: False - Whether to use persistent workers for the dataloader
 
         # Grouping
         group_by_length: true # Whether to group samples by length or not while batching
         length_column_name: length
 
         # Others
-        # predict_with_generate: True  # Important for generation tasks
         full_determinism: false
-        # remove_unused_columns: false  # KEEP all columns    
         bf16: false
-        # fp16_opt_level: O2
         fp16: false
 
 cuda:
     empty_cache_steps: null
 
-# While loading configuration 
-# this parameters are added to the environment variables
 env:
-
-    # CUDA_LAUNCH_BLOCKING: '1'
-    # expandable_segments uses CUDA virtual-memory APIs so segments grow on
-    # demand from a reserved virtual range, defragmenting around large
-    # cross-entropy logits (vocab=256k × budget tokens × 4B in fp32). Needed
-    # because the auto token-budget calibrator's headroom can be eaten by
-    # cumulative fragmentation during the bebe test sweep.
     PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
-
-    # huggingface/tokenizers: The current process just got forked, after parallelism has already been used. 
-    # Disabling parallelism to avoid deadlocks...
-    # To disable this warning, you can either:
-    #         - Avoid using `tokenizers` before the fork if possible
-    #         - Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
     TOKENIZERS_PARALLELISM: 'true' # 'true' | 'false'

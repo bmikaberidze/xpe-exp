@@ -1,0 +1,68 @@
+# Belebele self-split, BLOOMZ-7b1 — XPE vs SPT vs DUAL, trained AND tested on
+# Belebele itself (no XStoryCloze task mismatch). Source langs and target langs
+# are item-disjoint folds of the same 900 Belebele items, so a held-out test
+# item never leaks via its parallel translation in a source language.
+#
+# Entry 0 is the zero-shot baseline: base BLOOMZ-7b1, no adapter, tested on the
+# SAME fold test split (300 items) as the tuned variants — the source of truth.
+# Entries 1-3 are the three prompt-tuning methods (LR/PEFT come from each tune
+# config as-is; add overrides per entry to grid-search later).
+#
+# Fold and seed are RUNTIME args (--fold / --seed), not part of this file:
+#   --fold : iterate on one fold (default fold0) during dev; sweep all three at
+#            the end for the final numbers.
+#   --seed : pin the training seed so it's SHARED across methods (paired
+#            comparison — same shuffle/init/dropout per seed, so seed variance
+#            cancels). Omit to let the toolkit randomize per run. Either way the
+#            actual seed used is recorded in raw.csv (alongside fold). Sweep
+#            --seed 0/1/2 for mean±std. --source-langs are BLOOM ROOTS-seen
+#            anchors (clean seen/unseen split).
+#
+# Dispatch (interactive single entry first — zero-shot baseline, fast, no tune):
+#   python -m scripts.run_xlt_meta \
+#       --meta-config ./config/meta/8_bebe_self_split_bloomz.yml \
+#       --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
+#       --source-langs eng_Latn,spa_Latn,fra_Latn,zho_Hans,hin_Deva,arb_Arab,ind_Latn \
+#       --fold 0 \
+#       --task-id 0
+#
+# One tuned method interactively (XPE on fold0, seed pinned):
+#   python -m scripts.run_xlt_meta \
+#       --meta-config ./config/meta/8_bebe_self_split_bloomz.yml \
+#       --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
+#       --source-langs eng_Latn,spa_Latn,fra_Latn,zho_Hans,hin_Deva,arb_Arab,ind_Latn \
+#       --fold 0 --seed 0 \
+#       --task-id 1
+#
+# Full array on one fold + one seed (0 = zero-shot, 1-3 = xpe/spt/dual):
+#   sbatch --array=0-3 runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/8_bebe_self_split_bloomz.yml \
+#         --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
+#         --source-langs eng_Latn,spa_Latn,fra_Latn,zho_Hans,hin_Deva,arb_Arab,ind_Latn \
+#         --fold 0 --seed 0"
+#
+# Final numbers: sweep --seed 0/1/2 (× --fold 0/1/2) and aggregate mean±std.
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.bloomz-7b1.ds.bebe.yml
+  spt: ./config/tune.spt.lm.bloomz-7b1.ds.bebe.yml
+  dual: ./config/tune.dual.lm.bloomz-7b1.ds.bebe.yml
+
+matrix:
+
+  # 0: Zero-shot baseline — base BLOOMZ-7b1, no adapter, on the fold test split.
+  #    No tune_method / adapter_uuid4 → run_xlt tests the test config's model as-is.
+  - run_name: zero_shot
+
+  # 1: XPE (MLP reparam, full cross-prompt encoder; LR from tune config)
+  - tune_method: xpe
+    run_name: xpe
+
+  # 2: SPT (standard soft prompt; LR from tune config)
+  - tune_method: spt
+    run_name: spt
+
+  # 3: DUAL (SPT + XPE combined, encoder_ratio 0.3; LR from tune config)
+  - tune_method: dual
+    run_name: dual
