@@ -30,6 +30,19 @@ def test_bloom_seen_group():
     assert resolve_langs('bloom_seen', '') == bloom_seen
 
 
+def test_aya_seen_group():
+    aya_seen = LANG_GROUPS['aya_seen']
+    # 24 codes = Aya Expanse's 23 languages (Chinese as both scripts), all in Belebele
+    assert len(aya_seen) == 24
+    assert len(set(aya_seen)) == 24  # no duplicates
+    assert {'zho_Hans', 'zho_Hant'} <= set(aya_seen)
+    # native scripts / MSA Arabic / Western Persian
+    assert 'arb_Arab' in aya_seen and 'pes_Arab' in aya_seen
+    for romanized in ('hin_Latn', 'urd_Latn', 'arb_Latn'):
+        assert romanized not in aya_seen
+    assert resolve_langs('aya_seen', '') == aya_seen
+
+
 def test_resolve_group_name():
     assert resolve_langs('joshi5', '') == JOSHI5
 

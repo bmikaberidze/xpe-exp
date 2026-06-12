@@ -96,6 +96,17 @@ LANG_GROUPS = {
         'nya_Latn', 'sna_Latn', 'swh_Latn', 'tsn_Latn', 'tso_Latn', 'wol_Latn',
         'xho_Latn', 'yor_Latn', 'zul_Latn',
     ],
+
+    # Aya Expanse (CohereLabs/aya-expanse-8b) 23 languages, intersected with
+    # Belebele's 122 (24 codes; all 23 present, Chinese as both scripts). Native
+    # scripts; MSA arb_Arab; Western Persian pes_Arab. The Aya analogue of the
+    # paper's "Seen" source group (for the aya backbone, not BLOOMZ).
+    'aya_seen': [
+        'eng_Latn', 'fra_Latn', 'spa_Latn', 'por_Latn', 'ita_Latn', 'deu_Latn',
+        'nld_Latn', 'ces_Latn', 'pol_Latn', 'ron_Latn', 'ell_Grek', 'rus_Cyrl',
+        'ukr_Cyrl', 'tur_Latn', 'arb_Arab', 'heb_Hebr', 'pes_Arab', 'hin_Deva',
+        'ind_Latn', 'vie_Latn', 'jpn_Jpan', 'kor_Hang', 'zho_Hans', 'zho_Hant',
+    ],
 }
 
 
