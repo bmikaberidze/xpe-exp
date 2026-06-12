@@ -205,15 +205,17 @@ Usage:
     sbatch --array=2 runtime/clusters/pegasus/shell/run.sh --site-packages \
         "python -m scripts.run_xlt_meta \
             --meta-config ./config/meta/0_zero_shot_eval.yml \
-            --test-config ./config/test.lm.bloomz-7b1.ds.bebe.yml \
+            --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
             --sequential-test \
+            --seed 10 \
             --fold 0"
 
-    sbatch --array=1-2 runtime/clusters/pegasus/shell/run.sh --site-packages \
+    sbatch --array=1-3 runtime/clusters/pegasus/shell/run.sh --site-packages \
         "python -m scripts.run_xlt_meta \
             --meta-config ./config/meta/8_bebe_self_split_bloomz.yml \
             --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
             --source-langs eng_Latn,spa_Latn,fra_Latn,zho_Hans,hin_Deva,arb_Arab,ind_Latn \
+            --seed 10 \
             --fold 0"
 
     squeue -u bmikaberidze -l
