@@ -68,6 +68,36 @@ from micm_nlp.training.runner import TRAINER
 
 SLURM_ARRAY_TASK_ID = 'SLURM_ARRAY_TASK_ID'
 
+# Named source-language groups: pass --source-group <name> instead of a long
+# --source-langs list. The group name also becomes the run-dir src_tag, so
+# artefact paths stay short. Add entries here as new anchor sets are needed.
+LANG_GROUPS = {
+    'anchors7': ['eng_Latn', 'spa_Latn', 'fra_Latn',
+                 'zho_Hans', 'hin_Deva', 'arb_Arab', 'ind_Latn'],
+}
+
+
+def resolve_langs(group: str | None, csv: str) -> list[str]:
+    """Resolve a lang list from a group name XOR a comma-separated string.
+
+    `group` and `csv` are mutually exclusive. A known group name maps via
+    LANG_GROUPS; otherwise the csv is split/trimmed. Neither set -> []."""
+    if group and csv:
+        raise ValueError('pass a group name or a langs csv, not both')
+    if group:
+        if group not in LANG_GROUPS:
+            raise ValueError(f'unknown lang group {group!r}; known: {sorted(LANG_GROUPS)}')
+        return list(LANG_GROUPS[group])
+    return [s.strip() for s in csv.split(',') if s.strip()]
+
+
+def src_tag_for(group: str | None, source_langs_sorted: list[str]) -> str:
+    """Run-dir source tag: the group name when given, else the joined sorted
+    langs (matching the historical naming), else 'zero' for zero-shot."""
+    if group:
+        return group
+    return '-'.join(source_langs_sorted) if source_langs_sorted else 'zero'
+
 
 # --- CLI --------------------------------------------------------------------
 
