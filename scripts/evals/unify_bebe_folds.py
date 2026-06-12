@@ -17,7 +17,7 @@ Outputs (beside PATH unless --out-prefix given):
 
 Usage:
     python -m scripts.evals.unify_bebe_folds \\
-        artefacts/evals/xlt_runs/bloom/anchors7/9_bebe_grid_bloomz \\
+        artefacts/evals/xlt_runs/bloom/joshi5/9_bebe_grid_bloomz \\
         --zero-shot-path artefacts/evals/xlt_runs/bloom/zero/0_zero_shot_eval
 """
 import argparse

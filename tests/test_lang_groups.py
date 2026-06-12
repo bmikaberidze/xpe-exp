@@ -5,15 +5,15 @@ from types import SimpleNamespace
 from scripts.run_xlt import LANG_GROUPS, resolve_langs, src_tag_for
 from scripts.run_xlt import build_run_paths
 
-ANCHORS7 = ['eng_Latn', 'spa_Latn', 'fra_Latn', 'zho_Hans', 'hin_Deva', 'arb_Arab', 'ind_Latn']
+JOSHI5 = ['eng_Latn', 'spa_Latn', 'deu_Latn', 'fra_Latn', 'jpn_Jpan', 'zho_Hans', 'arb_Arab']
 
 
-def test_anchors7_group_defined():
-    assert LANG_GROUPS['anchors7'] == ANCHORS7
+def test_joshi5_group_defined():
+    assert LANG_GROUPS['joshi5'] == JOSHI5
 
 
 def test_resolve_group_name():
-    assert resolve_langs('anchors7', '') == ANCHORS7
+    assert resolve_langs('joshi5', '') == JOSHI5
 
 
 def test_resolve_csv_when_no_group():
@@ -21,13 +21,13 @@ def test_resolve_csv_when_no_group():
 
 
 def test_resolve_unknown_group_raises():
-    with pytest.raises(ValueError, match='anchors7'):  # message lists known groups
+    with pytest.raises(ValueError, match='joshi5'):  # message lists known groups
         resolve_langs('nope', '')
 
 
 def test_resolve_both_set_raises():
     with pytest.raises(ValueError, match='both'):
-        resolve_langs('anchors7', 'en,ru')
+        resolve_langs('joshi5', 'en,ru')
 
 
 def test_resolve_neither_set_returns_empty():
@@ -35,7 +35,7 @@ def test_resolve_neither_set_returns_empty():
 
 
 def test_src_tag_uses_group_name():
-    assert src_tag_for('anchors7', sorted(ANCHORS7)) == 'anchors7'
+    assert src_tag_for('joshi5', sorted(JOSHI5)) == 'joshi5'
 
 
 def test_src_tag_falls_back_to_joined_sorted_langs():
@@ -53,11 +53,11 @@ def _cfg(arch='bloom'):
 def test_build_run_paths_uses_group_name_as_src_tag(tmp_path, monkeypatch):
     monkeypatch.setattr('scripts.run_xlt.evals_dir', lambda: tmp_path)
     run_dir, llm, src_tag, run_group, run_name = build_run_paths(
-        tune_config=None, test_config=_cfg(), source_langs_sorted=sorted(ANCHORS7),
-        run_group='g', slurm_task_id=0, interactive=True, source_group='anchors7',
+        tune_config=None, test_config=_cfg(), source_langs_sorted=sorted(JOSHI5),
+        run_group='g', slurm_task_id=0, interactive=True, source_group='joshi5',
     )
-    assert src_tag == 'anchors7'
-    assert 'anchors7' in str(run_dir)
+    assert src_tag == 'joshi5'
+    assert 'joshi5' in str(run_dir)
 
 
 def test_build_run_paths_falls_back_to_joined_langs(tmp_path, monkeypatch):
