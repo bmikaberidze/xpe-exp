@@ -72,8 +72,11 @@ SLURM_ARRAY_TASK_ID = 'SLURM_ARRAY_TASK_ID'
 # --source-langs list. The group name also becomes the run-dir src_tag, so
 # artefact paths stay short. Add entries here as new anchor sets are needed.
 LANG_GROUPS = {
-    'anchors7': ['eng_Latn', 'spa_Latn', 'fra_Latn',
-                 'zho_Hans', 'hin_Deva', 'arb_Arab', 'ind_Latn'],
+    # Joshi et al. (2020) Class-5 ("The Winners"): the 7 highest-resource
+    # languages. Note: German + Japanese are NOT in BLOOM's ROOTS pretraining,
+    # so as BLOOM source langs they are unseen-by-pretraining (paper used XLM-R).
+    'joshi5': ['eng_Latn', 'spa_Latn', 'deu_Latn', 'fra_Latn',
+               'jpn_Jpan', 'zho_Hans', 'arb_Arab'],
 }
 
 

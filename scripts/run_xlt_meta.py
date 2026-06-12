@@ -218,6 +218,17 @@ Usage:
             --seed 10 \
             --fold 0"
 
+
+    -
+    sbatch --array=0-17%10 \
+        runtime/clusters/pegasus/shell/run.sh --site-packages \
+            "python -m scripts.run_xlt_meta \
+                --meta-config ./config/meta/9a_lr_search_bebe_bloomz.yml \
+                --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
+                --source-group joshi5 \
+                --skip-test \
+                --fold 0"
+
     squeue -u bmikaberidze -l
 """
 

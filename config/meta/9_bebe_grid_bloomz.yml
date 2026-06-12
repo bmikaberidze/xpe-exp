@@ -11,11 +11,11 @@
 #     "python -m scripts.run_xlt_meta \
 #         --meta-config ./config/meta/9_bebe_grid_bloomz.yml \
 #         --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
-#         --source-group anchors7"
+#         --source-group joshi5"
 #
 # Aggregate:
 #   python -m scripts.evals.unify_bebe_folds \
-#       artefacts/evals/xlt_runs/bloom/anchors7/9_bebe_grid_bloomz \
+#       artefacts/evals/xlt_runs/bloom/joshi5/9_bebe_grid_bloomz \
 #       --zero-shot-path artefacts/evals/xlt_runs/bloom/zero/0_zero_shot_eval
 
 tune_configs:
