@@ -1,0 +1,45 @@
+# LR search for the Belebele self-split grid (BLOOMZ-7b1).
+# XPE x {5e-6, 5e-5, 5e-4} and SPT x {5e-4, 5e-3, 5e-2}, each x seeds {10,11,12},
+# all on fold 0. DUAL is NOT searched here (single-LR module; LR handling deferred).
+#
+# SELECT on VALIDATION accuracy (the 100-item val split, read from wandb), averaged
+# across the 3 seeds per (method, LR). Do NOT select on test. Dispatch with a small
+# --target-langs set so the test phase stays cheap. One narrow follow-up round only
+# if a method's winner lands on a grid edge.
+#
+# Dispatch (full array, fold0, small target set for cheap test):
+#   sbatch --array=0-17 runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/9a_lr_search_bebe_bloomz.yml \
+#         --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
+#         --source-group anchors7 \
+#         --target-langs deu_Latn,kat_Geor \
+#         --fold 0"
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.bloomz-7b1.ds.bebe.yml
+  spt: ./config/tune.spt.lm.bloomz-7b1.ds.bebe.yml
+
+matrix:
+
+  # XPE x 3 LR x 3 seed (entries 0-8)
+  - {tune_method: xpe, run_name: xpe_lr5e6_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-6}}
+  - {tune_method: xpe, run_name: xpe_lr5e6_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-6}}
+  - {tune_method: xpe, run_name: xpe_lr5e6_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-6}}
+  - {tune_method: xpe, run_name: xpe_lr5e5_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr5e5_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr5e5_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-4}}
+
+  # SPT x 3 LR x 3 seed (entries 9-17)
+  - {tune_method: spt, run_name: spt_lr5e4_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: spt, run_name: spt_lr5e4_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: spt, run_name: spt_lr5e4_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: spt, run_name: spt_lr5e3_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-3}}
+  - {tune_method: spt, run_name: spt_lr5e3_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-3}}
+  - {tune_method: spt, run_name: spt_lr5e3_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-3}}
+  - {tune_method: spt, run_name: spt_lr5e2_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-2}}
+  - {tune_method: spt, run_name: spt_lr5e2_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-2}}
+  - {tune_method: spt, run_name: spt_lr5e2_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-2}}

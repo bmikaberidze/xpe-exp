@@ -274,9 +274,22 @@ def load_meta_config(path: str) -> dict:
                     f'meta config {path}: matrix[{i}].tune_method={method!r} '
                     f'not in tune_configs {sorted(tune_configs)}'
                 )
+        for k in ('fold', 'seed'):
+            if k in entry and entry[k] is not None and not isinstance(entry[k], int):
+                raise ValueError(f'meta config {path}: matrix[{i}].{k} must be an int')
 
     data['tune_configs'] = tune_configs
     return data
+
+
+def resolve_fold_seed(entry, cli_fold, cli_seed):
+    """Per-entry fold/seed win over the CLI defaults; CLI is the fallback.
+
+    Lets one meta matrix enumerate the full method x fold x seed grid so it
+    dispatches as a single SLURM array."""
+    fold = entry['fold'] if entry.get('fold') is not None else cli_fold
+    seed = entry['seed'] if entry.get('seed') is not None else cli_seed
+    return fold, seed
 
 
 def _apply_override(config, dotted_path: str, value) -> None:
@@ -297,6 +310,8 @@ def parse_args():
     ap.add_argument('--source-langs', type=str, default='',
                     help='Comma-separated xsc lang codes. Required for tune mode; '
                          'optional for replay / zero-shot (run-dir naming only).')
+    ap.add_argument('--source-group', type=str, default=None,
+                    help='Named group from LANG_GROUPS (XOR --source-langs).')
     ap.add_argument('--target-langs', type=str, default=None, help='Comma-separated bebe lang codes; default: auto-discover')
     ap.add_argument('--fold', type=int, default=None,
                     help="Belebele self-split fold index; rewrites the tune+test config ds.dirs "
@@ -375,7 +390,9 @@ def main():
     print(f'[meta] run_group={run_group} | task_id={task_id} interactive={interactive} | '
           f'run_name={run_name_tag!r} | mode={mode_desc}')
 
-    source_langs = [s.strip() for s in args.source_langs.split(',') if s.strip()]
+    from scripts.run_xlt import resolve_langs
+    source_langs = resolve_langs(args.source_group, args.source_langs)
+    fold, seed = resolve_fold_seed(entry, cli_fold=args.fold, cli_seed=args.seed)
     target_langs = (
         [s.strip() for s in args.target_langs.split(',') if s.strip()]
         if args.target_langs else None
@@ -387,8 +404,9 @@ def main():
         test_config=test_config,
         source_langs=source_langs,
         target_langs=target_langs,
-        fold=args.fold,
-        seed=args.seed,
+        fold=fold,
+        seed=seed,
+        source_group=args.source_group,
         run_group=run_group,
         slurm_task_id=task_id,
         interactive=interactive,

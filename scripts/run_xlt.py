@@ -68,6 +68,36 @@ from micm_nlp.training.runner import TRAINER
 
 SLURM_ARRAY_TASK_ID = 'SLURM_ARRAY_TASK_ID'
 
+# Named source-language groups: pass --source-group <name> instead of a long
+# --source-langs list. The group name also becomes the run-dir src_tag, so
+# artefact paths stay short. Add entries here as new anchor sets are needed.
+LANG_GROUPS = {
+    'anchors7': ['eng_Latn', 'spa_Latn', 'fra_Latn',
+                 'zho_Hans', 'hin_Deva', 'arb_Arab', 'ind_Latn'],
+}
+
+
+def resolve_langs(group: str | None, csv: str) -> list[str]:
+    """Resolve a lang list from a group name XOR a comma-separated string.
+
+    `group` and `csv` are mutually exclusive. A known group name maps via
+    LANG_GROUPS; otherwise the csv is split/trimmed. Neither set -> []."""
+    if group and csv:
+        raise ValueError('pass a group name or a langs csv, not both')
+    if group:
+        if group not in LANG_GROUPS:
+            raise ValueError(f'unknown lang group {group!r}; known: {sorted(LANG_GROUPS)}')
+        return list(LANG_GROUPS[group])
+    return [s.strip() for s in csv.split(',') if s.strip()]
+
+
+def src_tag_for(group: str | None, source_langs_sorted: list[str]) -> str:
+    """Run-dir source tag: the group name when given, else the joined sorted
+    langs (matching the historical naming), else 'zero' for zero-shot."""
+    if group:
+        return group
+    return '-'.join(source_langs_sorted) if source_langs_sorted else 'zero'
+
 
 # --- CLI --------------------------------------------------------------------
 
@@ -81,6 +111,9 @@ def parse_args():
                     help='Comma-separated xsc lang codes. Required for tune mode (used '
                          'as the concatenated training source); optional for replay / '
                          'zero-shot (used only as run-dir naming metadata).')
+    ap.add_argument('--source-group', type=str, default=None,
+                    help='Named group from LANG_GROUPS (XOR --source-langs). '
+                         'Also used as the run-dir src_tag.')
     ap.add_argument('--target-langs', type=str, default=None,
                     help='Comma-separated bebe lang codes; default: auto-discover from tokenized dirs')
     ap.add_argument('--fold', type=int, default=None,
@@ -156,10 +189,10 @@ def apply_seed(tune_config, seed: int | None) -> None:
     ta.args.seed = seed
 
 
-def build_run_paths(tune_config, test_config, source_langs_sorted, run_group, slurm_task_id, interactive, run_name_tag=None):
+def build_run_paths(tune_config, test_config, source_langs_sorted, run_group, slurm_task_id, interactive, run_name_tag=None, source_group=None):
     llm_config = tune_config if tune_config else test_config
     llm = llm_config.model.architecture
-    src_tag = '-'.join(source_langs_sorted) if source_langs_sorted else 'zero'
+    src_tag = src_tag_for(source_group, source_langs_sorted)
 
     # Make the resolved task id visible to downstream code (TRAINER etc.)
     # whether we're running under SLURM or interactively.
@@ -174,7 +207,15 @@ def build_run_paths(tune_config, test_config, source_langs_sorted, run_group, sl
     return run_dir, llm, src_tag, run_group, run_name
 
 
-def discover_target_langs(test_config):
+def target_langs_excluding(all_langs, source_langs):
+    """All discovered langs minus the source langs (order preserved).
+
+    We never test cross-lingual transfer on a source (in-language) lang."""
+    drop = set(source_langs or [])
+    return [l for l in all_langs if l not in drop]
+
+
+def discover_target_langs(test_config, exclude=()):
     parts = test_config.ds.dirs.split('/')
     benchmark_rel = '/'.join(parts[:2])
     # Everything after the <lang> segment (parts[2]) is the per-lang subpath.
@@ -185,7 +226,7 @@ def discover_target_langs(test_config):
     for lang_dir in sorted(search_root.iterdir()):
         if (lang_dir / lang_subpath).is_dir():
             langs.append(lang_dir.name)
-    return langs
+    return target_langs_excluding(langs, exclude)
 
 # --- Dataset assembly -------------------------------------------------------
 
@@ -376,6 +417,7 @@ def run_xlt(
     *,
     test_config,
     source_langs,
+    source_group: str | None = None,
     run_group,
     slurm_task_id: int,
     interactive: bool = False,
@@ -434,8 +476,11 @@ def run_xlt(
         raise ValueError('source_langs is required for tune mode (the training set is built '
                          'by concatenating per-lang datasets)')
 
+    source_label = source_group or ','.join(source_langs_sorted)
+
     run_dir, llm, src_tag, run_group, run_name = build_run_paths(
-        tune_config, test_config, source_langs_sorted, run_group, slurm_task_id, interactive, run_name_tag
+        tune_config, test_config, source_langs_sorted, run_group, slurm_task_id, interactive, run_name_tag,
+        source_group=source_group,
     )
     print(f'[xlt] run_dir={run_dir}')
 
@@ -451,7 +496,7 @@ def run_xlt(
             'src_tag': src_tag,
             'fold': fold,
             'seed': seed_used,
-            'source_langs': ','.join(source_langs_sorted),
+            'source_langs': source_label,
             'adapter_uuid4': adapter_uuid4,
             'adapter_path': str(adapter_path),
             'tune_config': tune_config_source,
@@ -461,7 +506,7 @@ def run_xlt(
         wire_test_to_adapter(test_config, adapter_uuid4=adapter_uuid4, adapter_path=adapter_path)
 
     if target_langs is None:
-        target_langs = discover_target_langs(test_config)
+        target_langs = discover_target_langs(test_config, exclude=source_langs_sorted)
     print(f'[xlt] target langs ({len(target_langs)}): {target_langs}')
 
     csv_sink = ResultsCSV(run_dir, meta={
@@ -471,7 +516,7 @@ def run_xlt(
         'src_tag': src_tag,
         'fold': '' if fold is None else fold,
         'seed': '' if seed_used is None else seed_used,
-        'source_langs': ','.join(source_langs_sorted),
+        'source_langs': source_label,
         'adapter_uuid4': adapter_uuid4 or '',
         'adapter_path': adapter_path or '',
         'tune_config': tune_config_source,
@@ -506,7 +551,7 @@ def main():
                 f'--adapter-path basename does not encode a uuid; pass --adapter-uuid4 explicitly'
             )
 
-    source_langs = [s.strip() for s in args.source_langs.split(',') if s.strip()]
+    source_langs = resolve_langs(args.source_group, args.source_langs)
     target_langs = (
         [s.strip() for s in args.target_langs.split(',') if s.strip()]
         if args.target_langs else None
@@ -520,6 +565,7 @@ def main():
         tune_config=tune_config,
         test_config=test_config,
         source_langs=source_langs,
+        source_group=args.source_group,
         target_langs=target_langs,
         fold=args.fold,
         seed=args.seed,
