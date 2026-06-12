@@ -204,7 +204,15 @@ def build_run_paths(tune_config, test_config, source_langs_sorted, run_group, sl
     return run_dir, llm, src_tag, run_group, run_name
 
 
-def discover_target_langs(test_config):
+def target_langs_excluding(all_langs, source_langs):
+    """All discovered langs minus the source langs (order preserved).
+
+    We never test cross-lingual transfer on a source (in-language) lang."""
+    drop = set(source_langs or [])
+    return [l for l in all_langs if l not in drop]
+
+
+def discover_target_langs(test_config, exclude=()):
     parts = test_config.ds.dirs.split('/')
     benchmark_rel = '/'.join(parts[:2])
     # Everything after the <lang> segment (parts[2]) is the per-lang subpath.
@@ -215,7 +223,7 @@ def discover_target_langs(test_config):
     for lang_dir in sorted(search_root.iterdir()):
         if (lang_dir / lang_subpath).is_dir():
             langs.append(lang_dir.name)
-    return langs
+    return target_langs_excluding(langs, exclude)
 
 # --- Dataset assembly -------------------------------------------------------
 
