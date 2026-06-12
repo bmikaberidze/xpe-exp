@@ -75,8 +75,27 @@ LANG_GROUPS = {
     # Joshi et al. (2020) Class-5 ("The Winners"): the 7 highest-resource
     # languages. Note: German + Japanese are NOT in BLOOM's ROOTS pretraining,
     # so as BLOOM source langs they are unseen-by-pretraining (paper used XLM-R).
-    'joshi5': ['eng_Latn', 'spa_Latn', 'deu_Latn', 'fra_Latn',
-               'jpn_Jpan', 'zho_Hans', 'arb_Arab'],
+    'joshi5': ['eng_Latn', 'spa_Latn', 'deu_Latn', 'fra_Latn', 'jpn_Jpan', 'zho_Hans', 'arb_Arab'],
+
+    # BLOOM/BLOOMZ pretraining (ROOTS) languages, intersected with Belebele's
+    # 122 (39 langs). Native scripts only (romanized *_Latn dups dropped);
+    # Arabic = MSA arb_Arab only (not the dialectal acm/apc/ars/ary/arz); both
+    # Chinese scripts. Excludes 5 ROOTS langs absent from Belebele: Chi Tumbuka,
+    # Kikuyu, Akan, Fon, Kirundi. This is the BLOOM analogue of the paper's
+    # XLM-R "Seen" source group.
+    'bloom_seen': [
+        # high-resource / Romance / other
+        'eng_Latn', 'fra_Latn', 'spa_Latn', 'por_Latn', 'cat_Latn', 'eus_Latn',
+        'ind_Latn', 'vie_Latn', 'arb_Arab', 'zho_Hans', 'zho_Hant',
+        # Indic (Indo-Aryan + Dravidian)
+        'asm_Beng', 'ben_Beng', 'guj_Gujr', 'hin_Deva', 'kan_Knda', 'mal_Mlym',
+        'mar_Deva', 'npi_Deva', 'ory_Orya', 'pan_Guru', 'tam_Taml', 'tel_Telu',
+        'urd_Arab',
+        # Niger-Congo
+        'bam_Latn', 'ibo_Latn', 'kin_Latn', 'lin_Latn', 'lug_Latn', 'nso_Latn',
+        'nya_Latn', 'sna_Latn', 'swh_Latn', 'tsn_Latn', 'tso_Latn', 'wol_Latn',
+        'xho_Latn', 'yor_Latn', 'zul_Latn',
+    ],
 }
 
 

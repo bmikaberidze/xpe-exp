@@ -12,6 +12,24 @@ def test_joshi5_group_defined():
     assert LANG_GROUPS['joshi5'] == JOSHI5
 
 
+def test_bloom_seen_group():
+    bloom_seen = LANG_GROUPS['bloom_seen']
+    # 39 = ROOTS langs intersected with Belebele's 122
+    assert len(bloom_seen) == 39
+    assert len(set(bloom_seen)) == 39  # no duplicates
+    # native scripts only: no romanized *_Latn duplicates of native-script langs
+    for romanized in ('hin_Latn', 'urd_Latn', 'ben_Latn', 'npi_Latn', 'arb_Latn'):
+        assert romanized not in bloom_seen
+    # MSA Arabic only, no dialectal variants
+    for dialect in ('acm_Arab', 'apc_Arab', 'ars_Arab', 'ary_Arab', 'arz_Arab'):
+        assert dialect not in bloom_seen
+    assert 'arb_Arab' in bloom_seen
+    # the 5 ROOTS langs absent from Belebele must not appear
+    for absent in ('tum_Latn', 'kik_Latn', 'aka_Latn', 'fon_Latn', 'run_Latn'):
+        assert absent not in bloom_seen
+    assert resolve_langs('bloom_seen', '') == bloom_seen
+
+
 def test_resolve_group_name():
     assert resolve_langs('joshi5', '') == JOSHI5
 
