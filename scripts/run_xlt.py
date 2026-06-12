@@ -131,6 +131,9 @@ def parse_args():
                          '(or pass --adapter-uuid4 alongside). Skips tune.')
     ap.add_argument('--sequential-test', action='store_true',
                     help='Run bebe langs one-by-one instead of concat-predict (debug)')
+    ap.add_argument('--skip-test', action='store_true',
+                    help='Tune only, then skip the test phase entirely (e.g. LR search '
+                         'selects on validation, so the test phase is wasted work).')
     ap.add_argument('--s-task-id', type=int, default=1,
                     help='Fake SLURM_ARRAY_TASK_ID for interactive mode')
     return ap.parse_args()
@@ -413,6 +416,13 @@ class ResultsCSV:
 # --- Library entry point ----------------------------------------------------
 
 
+def check_skip_test(skip_test, has_tune):
+    """`--skip-test` only makes sense when there's a tune phase whose adapter we
+    keep. Without a tune (zero-shot / adapter-replay) there'd be nothing to do."""
+    if skip_test and not has_tune:
+        raise ValueError('--skip-test requires a tune (no tune phase = nothing to do)')
+
+
 def run_xlt(
     *,
     test_config,
@@ -429,6 +439,7 @@ def run_xlt(
     adapter_uuid4: str | None = None,
     adapter_path: str | None = None,
     sequential_test=False,
+    skip_test=False,
     tune_config_source='',
     test_config_source='',
     meta_config_source='',
@@ -456,6 +467,7 @@ def run_xlt(
 
     skip_tune = tune_config is None
     zero_shot = skip_tune and not adapter_uuid4
+    check_skip_test(skip_test, has_tune=not skip_tune)
 
     # Aim both configs at the requested Belebele fold (no-op when fold is None
     # or the path has no 'fold<N>' segment-free dirs left as-is).
@@ -501,6 +513,12 @@ def run_xlt(
             'adapter_path': str(adapter_path),
             'tune_config': tune_config_source,
         }, str(run_dir / 'tune.yml'))
+
+    if skip_test:
+        print('[xlt] --skip-test: trained adapter saved, skipping test phase')
+        if wandb.run is not None:
+            wandb.finish()
+        return
 
     if not zero_shot:
         wire_test_to_adapter(test_config, adapter_uuid4=adapter_uuid4, adapter_path=adapter_path)
@@ -575,6 +593,7 @@ def main():
         adapter_uuid4=adapter_uuid4,
         adapter_path=args.adapter_path,
         sequential_test=args.sequential_test,
+        skip_test=args.skip_test,
         tune_config_source=args.tune_config or '',
         test_config_source=args.test_config,
     )

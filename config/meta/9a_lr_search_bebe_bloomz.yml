@@ -3,17 +3,17 @@
 # all on fold 0. DUAL is NOT searched here (single-LR module; LR handling deferred).
 #
 # SELECT on VALIDATION accuracy (the 100-item val split, read from wandb), averaged
-# across the 3 seeds per (method, LR). Do NOT select on test. Dispatch with a small
-# --target-langs set so the test phase stays cheap. One narrow follow-up round only
-# if a method's winner lands on a grid edge.
+# across the 3 seeds per (method, LR). Do NOT select on test. Use --skip-test so the
+# wasted test phase is dropped entirely (selection is on validation). One narrow
+# follow-up round only if a method's winner lands on a grid edge.
 #
-# Dispatch (full array, fold0, small target set for cheap test):
+# Dispatch (full array, fold0, tune-only — no test phase):
 #   sbatch --array=0-17 runtime/clusters/pegasus/shell/run.sh --site-packages \
 #     "python -m scripts.run_xlt_meta \
 #         --meta-config ./config/meta/9a_lr_search_bebe_bloomz.yml \
 #         --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
 #         --source-group anchors7 \
-#         --target-langs deu_Latn,kat_Geor \
+#         --skip-test \
 #         --fold 0"
 
 tune_configs:

@@ -320,6 +320,8 @@ def parse_args():
                     help='Pin the training seed (shared across methods → paired '
                          'comparison; recorded in raw.csv). Omit to randomize per run.')
     ap.add_argument('--sequential-test', action='store_true')
+    ap.add_argument('--skip-test', action='store_true',
+                    help='Tune only, then skip the test phase (LR search selects on validation).')
     ap.add_argument('--task-id', type=int, default=None, help='Force matrix index for interactive testing of a single entry. '
                                                               'Ignored when SLURM_ARRAY_TASK_ID is set (real array dispatch wins).')
     return ap.parse_args()
@@ -412,6 +414,7 @@ def main():
         interactive=interactive,
         run_name_tag=run_name_tag,
         sequential_test=args.sequential_test,
+        skip_test=args.skip_test,
         adapter_uuid4=adapter_uuid4,
         adapter_path=adapter_path,
         tune_config_source=tune_config_path,
