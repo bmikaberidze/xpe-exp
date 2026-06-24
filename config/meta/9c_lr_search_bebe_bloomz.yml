@@ -1,0 +1,54 @@
+# LR search ROUND 3 — SPT ONLY (BLOOMZ-7b1, Belebele self-split).
+#
+# Two reasons this re-run is needed (both SPT-specific):
+#   1. WD bug: 9a/9b ran SPT with weight_decay=0.01, but SPT must use WD=0
+#      (no weight decay on the soft prompt). With WD=0 there is no decay
+#      counteracting large updates, so the optimum tends to shift LOWER than the
+#      WD=0.01 search suggested — hence this grid reaches down to 0.05.
+#   2. tune.spt config is now fixed to WD=0; this round measures the LR under it.
+#
+# Grid: SPT x {0.05, 0.1, 0.5, 1.0, 2.0} x seeds {10,11,12}. Scheduler=cosine.
+# (0.5 = 9a/9b's WD=0.01 winner, re-measured under WD=0; 0.05/0.1 probe lower;
+# 1.0/2.0 probe higher — 2.0 is the turnover-closure check.) XPE is NOT re-run —
+# it correctly used WD=0.01, winner 2e-3. Entries 12-14 are the 2.0 block.
+#
+# fold0 results so far (WD=0): 0.05/0.1=.750, 0.5=.758, 1.0=.767 (still rising).
+# Run fold1 (full grid) for cross-fold pattern stability; run fold0 only for the
+# new 2.0 block (the 0.05-1.0 block already ran).
+#
+# SELECT on VALIDATION accuracy, mean over the 3 seeds per LR. --skip-test.
+#
+# Dispatch fold1 (full grid):
+#   sbatch --array=0-14 runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/9c_lr_search_bebe_bloomz.yml \
+#         --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
+#         --source-group joshi5 --skip-test --fold 1"
+# Dispatch fold0 (2.0 block only, completes fold0):
+#   sbatch --array=12-14 runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/9c_lr_search_bebe_bloomz.yml \
+#         --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
+#         --source-group joshi5 --skip-test --fold 0"
+
+tune_configs:
+  spt: ./config/tune.spt.lm.bloomz-7b1.ds.bebe.yml
+
+matrix:
+
+  # SPT x 5 LR x 3 seed (entries 0-14; 2.0 block = entries 12-14)
+  - {tune_method: spt, run_name: spt_lr5e2_s10, seed: 10, overrides: {training_args.args.learning_rate: 0.05}}
+  - {tune_method: spt, run_name: spt_lr5e2_s11, seed: 11, overrides: {training_args.args.learning_rate: 0.05}}
+  - {tune_method: spt, run_name: spt_lr5e2_s12, seed: 12, overrides: {training_args.args.learning_rate: 0.05}}
+  - {tune_method: spt, run_name: spt_lr1e1_s10, seed: 10, overrides: {training_args.args.learning_rate: 0.1}}
+  - {tune_method: spt, run_name: spt_lr1e1_s11, seed: 11, overrides: {training_args.args.learning_rate: 0.1}}
+  - {tune_method: spt, run_name: spt_lr1e1_s12, seed: 12, overrides: {training_args.args.learning_rate: 0.1}}
+  - {tune_method: spt, run_name: spt_lr5e1_s10, seed: 10, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr5e1_s11, seed: 11, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr5e1_s12, seed: 12, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr1e0_s10, seed: 10, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr1e0_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr1e0_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr2e0_s10, seed: 10, overrides: {training_args.args.learning_rate: 2.0}}
+  - {tune_method: spt, run_name: spt_lr2e0_s11, seed: 11, overrides: {training_args.args.learning_rate: 2.0}}
+  - {tune_method: spt, run_name: spt_lr2e0_s12, seed: 12, overrides: {training_args.args.learning_rate: 2.0}}

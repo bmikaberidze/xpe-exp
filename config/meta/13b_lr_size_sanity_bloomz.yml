@@ -1,0 +1,56 @@
+# LR-transfer + source-SIZE sanity (BLOOMZ-7b1). Bloomz twin of 13a. Before the full
+# 360-run grid we confirm two things at once, cheaply (tune-only, fold 0, --skip-test):
+#   (1) LR TRANSFER: the joshi5 winners (XPE=2e-3 tune default, SPT=1.0 from 9c) still
+#       sit near the optimum when the SOURCE-LANG GROUP changes. Bracket each at 1/2x,
+#       1x, 2x; read VALIDATION accuracy (mean over 3 seeds).
+#   (2) SIZE / LEARNING CURVE: step-based training (max_steps=4000, eval_steps=100 ->
+#       40 val points to wandb). Source groups differ in #langs => #passes at fixed steps:
+#         enarzho     3 langs  -> overfit risk (val peaks early then drops)
+#         joshi5      7 langs  -> moderate
+#         bloom_seen 39 langs  -> undertrain risk (still rising at 4000 => bump max_steps)
+#
+# Matrix is method x LR x seed (18 cells, fold-/group-agnostic). Dispatch the SAME array
+# ONCE PER SOURCE GROUP. DUAL is NOT searched here.
+#
+# WD baked in (XPE=0.01, SPT=0). Scheduler cosine, warmup 0.1. --skip-test (val only).
+# Bloomz-7b1 fits in 80 GB -> default partition is fine, NO --partition override needed.
+#
+# Dispatch (run all THREE groups; %10 throttle):
+#   for G in enarzho joshi5 bloom_seen; do \
+#     sbatch --array=0-17%10 \
+#       runtime/clusters/pegasus/shell/run.sh --site-packages \
+#         "python -m scripts.run_xlt_meta \
+#             --meta-config ./config/meta/13b_lr_size_sanity_bloomz.yml \
+#             --test-config ./config/test.lm.bloomz-7b1.ds.bebe.fold.yml \
+#             --source-group $G --skip-test --fold 0"; \
+#   done
+#
+# Inspect (val acc + curves): unify_xlt_valid_res.py per group dir, or wandb history.
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.bloomz-7b1.ds.bebe.yml
+  spt: ./config/tune.spt.lm.bloomz-7b1.ds.bebe.yml
+
+matrix:
+
+  # XPE x 3 LR (1/2x, 1x=2e-3 default, 2x) x 3 seed (entries 0-8)
+  - {tune_method: xpe, run_name: xpe_lr1e3_s10, seed: 10, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr1e3_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr1e3_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr2e3_s10, seed: 10, overrides: {training_args.args.learning_rate: 2.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr2e3_s11, seed: 11, overrides: {training_args.args.learning_rate: 2.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr2e3_s12, seed: 12, overrides: {training_args.args.learning_rate: 2.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr4e3_s10, seed: 10, overrides: {training_args.args.learning_rate: 4.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr4e3_s11, seed: 11, overrides: {training_args.args.learning_rate: 4.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr4e3_s12, seed: 12, overrides: {training_args.args.learning_rate: 4.0e-3}}
+
+  # SPT x 3 LR (1/2x, 1x=1.0 from 9c, 2x) x 3 seed (entries 9-17)
+  - {tune_method: spt, run_name: spt_lr05_s10, seed: 10, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr05_s11, seed: 11, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr05_s12, seed: 12, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr10_s10, seed: 10, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr10_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr10_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr20_s10, seed: 10, overrides: {training_args.args.learning_rate: 2.0}}
+  - {tune_method: spt, run_name: spt_lr20_s11, seed: 11, overrides: {training_args.args.learning_rate: 2.0}}
+  - {tune_method: spt, run_name: spt_lr20_s12, seed: 12, overrides: {training_args.args.learning_rate: 2.0}}

@@ -1,0 +1,52 @@
+# LR search for the Belebele self-split grid (Aya Expanse 8B) — aya parallel of
+# 9a_lr_search_bebe_bloomz. XPE x {5e-6, 5e-5, 5e-4} and SPT x {5e-4, 5e-3, 5e-2},
+# each x seeds {10,11,12}, all on fold 0. DUAL is NOT searched here.
+#
+# Source group: aya_seen (the Aya Expanse "seen" languages) — defines the SEEN
+# tune+val set; test (when run) is cross-lingual on the UNSEEN remainder. This is
+# the aya analogue of bloomz's joshi5 source group; see [[project_xlt_seen_unseen_assembly]].
+# Scheduler is plain `cosine` (no restarts) in the tune configs.
+#
+# Start with the SAME broad grid as bloomz to locate aya's regime — do NOT assume
+# aya's optimum matches bloomz (bloomz wanted XPE>=5e-4, SPT>=5e-2). Follow up with
+# a 10b_*_aya round once the winner/edge is known.
+#
+# SELECT on VALIDATION accuracy (the 100-item-per-lang val split), averaged across
+# the 3 seeds per (method, LR). Do NOT select on test. Use --skip-test.
+#
+# Dispatch (full array, fold0, tune-only — no test phase):
+#   sbatch --array=0-17 runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/10a_lr_search_bebe_aya.yml \
+#         --test-config ./config/test.lm.aya.ds.bebe.fold.yml \
+#         --source-group aya_seen \
+#         --skip-test \
+#         --fold 0"
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.aya.ds.bebe.yml
+  spt: ./config/tune.spt.lm.aya.ds.bebe.yml
+
+matrix:
+
+  # XPE x 3 LR x 3 seed (entries 0-8)
+  - {tune_method: xpe, run_name: xpe_lr5e6_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-6}}
+  - {tune_method: xpe, run_name: xpe_lr5e6_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-6}}
+  - {tune_method: xpe, run_name: xpe_lr5e6_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-6}}
+  - {tune_method: xpe, run_name: xpe_lr5e5_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr5e5_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr5e5_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-4}}
+
+  # SPT x 3 LR x 3 seed (entries 9-17)
+  - {tune_method: spt, run_name: spt_lr5e4_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: spt, run_name: spt_lr5e4_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: spt, run_name: spt_lr5e4_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: spt, run_name: spt_lr5e3_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-3}}
+  - {tune_method: spt, run_name: spt_lr5e3_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-3}}
+  - {tune_method: spt, run_name: spt_lr5e3_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-3}}
+  - {tune_method: spt, run_name: spt_lr5e2_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-2}}
+  - {tune_method: spt, run_name: spt_lr5e2_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-2}}
+  - {tune_method: spt, run_name: spt_lr5e2_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-2}}

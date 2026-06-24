@@ -1,0 +1,61 @@
+# LR-transfer + source-SIZE sanity (Aya-Expanse-8b). Before the full 360-run grid we
+# confirm two things at once, cheaply (tune-only, fold 0, --skip-test):
+#   (1) LR TRANSFER: the 10b winners (XPE=1e-3, SPT=0.5, found on aya_seen) still sit
+#       near the optimum when the SOURCE-LANG GROUP changes. We bracket each winner at
+#       1/2x, 1x, 2x and read VALIDATION accuracy (mean over 3 seeds).
+#   (2) SIZE / LEARNING CURVE: training is STEP-based (max_steps=4000, eval_steps=100 ->
+#       40 val points logged to wandb). Source groups differ wildly in #langs => #passes
+#       over the data at fixed steps. Watch the val curve per group:
+#         enarzho   3 langs  -> many passes -> overfit risk (val peaks early then drops)
+#         joshi5    7 langs  -> moderate
+#         aya_seen 24 langs  -> each example seen rarely -> undertrain risk (still rising
+#                               at step 4000 => bump max_steps for the full grid)
+#
+# Matrix is method x LR x seed (18 cells, fold-agnostic + group-agnostic). Dispatch the
+# SAME array ONCE PER SOURCE GROUP (group comes from --source-group; src_tag separates
+# the output dirs). DUAL is NOT searched here (uses its tune-config default later).
+#
+# WD baked into the tune configs (XPE=0.01, SPT=0). Scheduler = cosine, warmup 0.1.
+# Select on VALIDATION accuracy; do NOT select on test -> --skip-test.
+#
+# !! AYA NEEDS >80 GB VRAM -> sbatch MUST pin the big-VRAM partition, else OOM.
+#
+# Dispatch (run all THREE groups; %10 throttle):
+#   for G in enarzho joshi5 aya_seen; do \
+#     sbatch --array=0-17%10 --partition=B200,H200,H200-PCI,H100-PCI,H100-Trails \
+#       runtime/clusters/pegasus/shell/run.sh --site-packages \
+#         "python -m scripts.run_xlt_meta \
+#             --meta-config ./config/meta/13a_lr_size_sanity_aya.yml \
+#             --test-config ./config/test.lm.aya.ds.bebe.fold.yml \
+#             --source-group $G --skip-test --fold 0"; \
+#   done
+#
+# Inspect (val acc + curves): unify_xlt_valid_res.py per group dir, or wandb history.
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.aya.ds.bebe.yml
+  spt: ./config/tune.spt.lm.aya.ds.bebe.yml
+
+matrix:
+
+  # XPE x 3 LR (1/2x, 1x=10b winner, 2x) x 3 seed (entries 0-8)
+  - {tune_method: xpe, run_name: xpe_lr5e4_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr1e3_s10, seed: 10, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr1e3_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr1e3_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr2e3_s10, seed: 10, overrides: {training_args.args.learning_rate: 2.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr2e3_s11, seed: 11, overrides: {training_args.args.learning_rate: 2.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr2e3_s12, seed: 12, overrides: {training_args.args.learning_rate: 2.0e-3}}
+
+  # SPT x 3 LR (1/2x, 1x=10b winner, 2x) x 3 seed (entries 9-17)
+  - {tune_method: spt, run_name: spt_lr025_s10, seed: 10, overrides: {training_args.args.learning_rate: 0.25}}
+  - {tune_method: spt, run_name: spt_lr025_s11, seed: 11, overrides: {training_args.args.learning_rate: 0.25}}
+  - {tune_method: spt, run_name: spt_lr025_s12, seed: 12, overrides: {training_args.args.learning_rate: 0.25}}
+  - {tune_method: spt, run_name: spt_lr05_s10, seed: 10, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr05_s11, seed: 11, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr05_s12, seed: 12, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr10_s10, seed: 10, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr10_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr10_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0}}

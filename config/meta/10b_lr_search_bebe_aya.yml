@@ -1,0 +1,80 @@
+# LR search ROUND 2 — Belebele self-split grid (Aya Expanse 8B). Follow-up to 10a,
+# which located the regime on fold 0 but did NOT bracket either optimum (both
+# methods were still rising at the top of their 10a grid):
+#
+#   10a fold0 (val acc, n=3):
+#     XPE  5e-6=.8644  5e-5=.8747  5e-4=.8768   (rising, edge at top -> push UP)
+#     SPT  5e-4=.8529  5e-3=.8632  5e-2=.8729   (rising, edge at top -> push UP)
+#
+# So 10b extends BOTH upward to find the turnover:
+#   XPE x {5e-4, 1e-3, 5e-3, 1e-2}   (5e-4 re-run as the anchor/overlap point)
+#   SPT x {1e-1, 5e-1, 1.0, 2.0}     (continues above 5e-2; 2.0 = turnover check)
+#   each x seeds {10,11,12} = 24 entries (0-23). DUAL is NOT searched here.
+#
+# SPT's high-LR preference is corroborated by bloomz: 9c (SPT, WD=0) peaked at
+# LR=1.0, so 0.1-2.0 is well-targeted. XPE flattens late (5e-5->5e-4 was only
+# +0.002, std +-0.0009) so the peak is likely at/just past 5e-4 -> 1e-3/5e-3/1e-2
+# locate where it turns over.
+#
+# Weight decay is baked into the tune configs (XPE=0.01, SPT=0; see
+# [[project_wd_xpe_vs_spt]]) -- no per-entry WD override, exactly as 10a.
+#
+# FOLDS: run fold 0 AND fold 2 (same as 9b/9c ran two folds, 0 & 1, to confirm
+# the LR pattern is stable across folds). Matrix is fold-agnostic; fold comes from
+# the CLI --fold, so dispatch the SAME array twice. Scheduler = plain cosine.
+#
+# Source group: aya_seen (SEEN tune+val set; test cross-lingual on UNSEEN). See
+# [[project_xlt_seen_unseen_assembly]]. SELECT on VALIDATION accuracy, mean over
+# the 3 seeds per (method, LR, fold). Do NOT select on test. Use --skip-test.
+#
+# !! AYA NEEDS >80 GB VRAM -> the sbatch MUST override the partition, else jobs
+#    land on <=80 GB nodes and OOM (see CLAUDE.md "GPU partitions / VRAM").
+#
+# Dispatch fold 0:
+#   sbatch --array=0-23%10 --partition=B200,H200,H200-PCI,H100-PCI,H100-Trails \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m scripts.run_xlt_meta \
+#           --meta-config ./config/meta/10b_lr_search_bebe_aya.yml \
+#           --test-config ./config/test.lm.aya.ds.bebe.fold.yml \
+#           --source-group aya_seen --skip-test --fold 0"
+# Dispatch fold 2 (same array):
+#   sbatch --array=0-23%10 --partition=B200,H200,H200-PCI,H100-PCI,H100-Trails \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m scripts.run_xlt_meta \
+#           --meta-config ./config/meta/10b_lr_search_bebe_aya.yml \
+#           --test-config ./config/test.lm.aya.ds.bebe.fold.yml \
+#           --source-group aya_seen --skip-test --fold 2"
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.aya.ds.bebe.yml
+  spt: ./config/tune.spt.lm.aya.ds.bebe.yml
+
+matrix:
+
+  # XPE x 4 LR x 3 seed (entries 0-11)
+  - {tune_method: xpe, run_name: xpe_lr5e4_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e4_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr1e3_s10, seed: 10, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr1e3_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr1e3_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr5e3_s10, seed: 10, overrides: {training_args.args.learning_rate: 5.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr5e3_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr5e3_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr1e2_s10, seed: 10, overrides: {training_args.args.learning_rate: 1.0e-2}}
+  - {tune_method: xpe, run_name: xpe_lr1e2_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0e-2}}
+  - {tune_method: xpe, run_name: xpe_lr1e2_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0e-2}}
+
+  # SPT x 4 LR x 3 seed (entries 12-23)
+  - {tune_method: spt, run_name: spt_lr1e1_s10, seed: 10, overrides: {training_args.args.learning_rate: 0.1}}
+  - {tune_method: spt, run_name: spt_lr1e1_s11, seed: 11, overrides: {training_args.args.learning_rate: 0.1}}
+  - {tune_method: spt, run_name: spt_lr1e1_s12, seed: 12, overrides: {training_args.args.learning_rate: 0.1}}
+  - {tune_method: spt, run_name: spt_lr5e1_s10, seed: 10, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr5e1_s11, seed: 11, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr5e1_s12, seed: 12, overrides: {training_args.args.learning_rate: 0.5}}
+  - {tune_method: spt, run_name: spt_lr1e0_s10, seed: 10, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr1e0_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr1e0_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0}}
+  - {tune_method: spt, run_name: spt_lr2e0_s10, seed: 10, overrides: {training_args.args.learning_rate: 2.0}}
+  - {tune_method: spt, run_name: spt_lr2e0_s11, seed: 11, overrides: {training_args.args.learning_rate: 2.0}}
+  - {tune_method: spt, run_name: spt_lr2e0_s12, seed: 12, overrides: {training_args.args.learning_rate: 2.0}}

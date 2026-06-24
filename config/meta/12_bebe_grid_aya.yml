@@ -1,0 +1,59 @@
+# Final Belebele self-split grid (Aya-Expanse-8b): XPE/SPT/DUAL x folds 0-2 x seeds 10-12.
+# Aya twin of 11_bebe_grid_bloomz.yml. One meta = one experiment = one SLURM array
+# (27 cells, all parallel). LRs are the 10b LR-search winners:
+#   XPE  lr=1e-3   (config/tune.xpe.lm.aya.ds.bebe.yml)
+#   SPT  lr=0.5    (config/tune.spt.lm.aya.ds.bebe.yml, WD=0)
+#   DUAL base lr=0.5 (SPT part) + xpe-group lr=1e-3 (config/tune.dual.lm.aya.ds.bebe.yml),
+#        encoder_ratio=0.7 (paper-winner 70% XPE / 30% SPT).
+# Folds are item-disjoint partitions -> aggregator POOLS them to 900 items; seeds give
+# the error bar. Zero-shot is NOT here (pass its path to the aggregator).
+#
+# Aya-Expanse-8b needs >80 GB VRAM -> sbatch MUST pin the big-VRAM partition.
+#
+# Dispatch (all 27 cells in parallel):
+#   sbatch --array=0-26 --partition=B200,H200,H200-PCI,H100-PCI,H100-Trails \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/12_bebe_grid_aya.yml \
+#         --test-config ./config/test.lm.aya.ds.bebe.fold.yml \
+#         --source-group aya_seen"
+#
+# Aggregate:
+#   python -m scripts.evals.unify_xlt_test_res \
+#       artefacts/evals/xlt_runs/aya/aya_seen/12_bebe_grid_aya \
+#       --zero-shot-path <aya zero-shot eval path>
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.aya.ds.bebe.yml
+  spt: ./config/tune.spt.lm.aya.ds.bebe.yml
+  dual: ./config/tune.dual.lm.aya.ds.bebe.yml
+
+matrix:
+
+  - {tune_method: xpe, run_name: xpe_f0_s10, fold: 0, seed: 10}
+  - {tune_method: xpe, run_name: xpe_f0_s11, fold: 0, seed: 11}
+  - {tune_method: xpe, run_name: xpe_f0_s12, fold: 0, seed: 12}
+  - {tune_method: xpe, run_name: xpe_f1_s10, fold: 1, seed: 10}
+  - {tune_method: xpe, run_name: xpe_f1_s11, fold: 1, seed: 11}
+  - {tune_method: xpe, run_name: xpe_f1_s12, fold: 1, seed: 12}
+  - {tune_method: xpe, run_name: xpe_f2_s10, fold: 2, seed: 10}
+  - {tune_method: xpe, run_name: xpe_f2_s11, fold: 2, seed: 11}
+  - {tune_method: xpe, run_name: xpe_f2_s12, fold: 2, seed: 12}
+  - {tune_method: spt, run_name: spt_f0_s10, fold: 0, seed: 10}
+  - {tune_method: spt, run_name: spt_f0_s11, fold: 0, seed: 11}
+  - {tune_method: spt, run_name: spt_f0_s12, fold: 0, seed: 12}
+  - {tune_method: spt, run_name: spt_f1_s10, fold: 1, seed: 10}
+  - {tune_method: spt, run_name: spt_f1_s11, fold: 1, seed: 11}
+  - {tune_method: spt, run_name: spt_f1_s12, fold: 1, seed: 12}
+  - {tune_method: spt, run_name: spt_f2_s10, fold: 2, seed: 10}
+  - {tune_method: spt, run_name: spt_f2_s11, fold: 2, seed: 11}
+  - {tune_method: spt, run_name: spt_f2_s12, fold: 2, seed: 12}
+  - {tune_method: dual, run_name: dual_f0_s10, fold: 0, seed: 10}
+  - {tune_method: dual, run_name: dual_f0_s11, fold: 0, seed: 11}
+  - {tune_method: dual, run_name: dual_f0_s12, fold: 0, seed: 12}
+  - {tune_method: dual, run_name: dual_f1_s10, fold: 1, seed: 10}
+  - {tune_method: dual, run_name: dual_f1_s11, fold: 1, seed: 11}
+  - {tune_method: dual, run_name: dual_f1_s12, fold: 1, seed: 12}
+  - {tune_method: dual, run_name: dual_f2_s10, fold: 2, seed: 10}
+  - {tune_method: dual, run_name: dual_f2_s11, fold: 2, seed: 11}
+  - {tune_method: dual, run_name: dual_f2_s12, fold: 2, seed: 12}
