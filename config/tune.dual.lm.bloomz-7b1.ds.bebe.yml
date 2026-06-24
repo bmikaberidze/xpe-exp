@@ -41,14 +41,16 @@ peft:
     # num_layers: # (`int`): The number of layers in the base transformer model.
     #
     ## PromptEncoderConfig(PromptLearningConfig): This is the configuration class to store the configuration of a [`PromptEncoder`].
-    # DUAL: MLP reparameterization + partial cross-prompt encoder (encoder_ratio: 0.3) — SPT and XPE combined.
+    # DUAL: MLP reparameterization + partial cross-prompt encoder — SPT and XPE combined.
+    # encoder_ratio = XPE fraction of virtual tokens (xpe_tokens = int(total * ratio); rest = SPT).
+    # Paper-winner split is 70% XPE / 30% SPT -> 0.7.
     encoder_reparameterization_type: MLP # (Union[[`PromptEncoderReparameterizationType`], `str`]): The type of reparameterization to use. (MLP, LSTM)
     encoder_hidden_size: 1024 # (`int`): The hidden size of the prompt encoder.
     encoder_num_layers: 2 # (`int`): The number of layers of the prompt encoder.
     encoder_dropout: 0.1 # (`float`): The dropout probability of the prompt encoder.
     #
     ## CrossPromptEncoderConfig(PromptEncoderConfig): This is the configuration class to store the configuration of a [`CrossPromptEncoder`].
-    encoder_ratio: 0.3
+    encoder_ratio: 0.7
     encoder_input_size: null
     encoder_init_state_dict_path: null
     encoder_freeze: false
@@ -142,7 +144,7 @@ custom_training_args:
     eval_force_sequential: true
     test_force_sequential: true
     # Early Stopping
-    early_stopping_after: 0.5 # Don't allow early stopping before X% of total training steps.
+    early_stopping_after: 0.25  # floor stop at 25% (step 1000) — past the ~300 peak; max_steps unchanged so LR picks stay valid
     early_stopping_patience: 5
     early_stopping_threshold: 0.0
     # Final Model Saving
@@ -153,6 +155,14 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
+    # Per-param-group LR/WD overrides. Substring-matched against
+    # parameter names; unmatched groups log a warning and are skipped.
+    optimizer_grouped_parameters:
+    - param_name_parts:
+        - xpe_embedding
+        - xpe_head
+      lr: 2e-3
+      weight_decay: 0.01
 
 training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
@@ -200,12 +210,10 @@ training_args:
             scale_parameter: false   # disable Adafactor's per-param LR rescaling
             relative_step: false     # disable Adafactor's internal LR schedule (external cosine drives LR)
             warmup_init: false       # only meaningful when relative_step=true
-        learning_rate: 5e-5
-        lr_scheduler_type: cosine_with_restarts
-        lr_scheduler_kwargs:
-            num_cycles: 2
+        learning_rate: 1.0   # SPT-part winner from 9c (WD=0); XPE-part lr=2e-3 set in optimizer_grouped_parameters
+        lr_scheduler_type: cosine
         warmup_ratio: 0.1
-        weight_decay: 0.01
+        weight_decay: 0.0  # base = SPT part: no WD (XPE part WD in optimizer_grouped_parameters)
         max_grad_norm: 1.0
 
         # Grouping
