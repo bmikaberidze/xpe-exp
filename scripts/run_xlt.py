@@ -77,6 +77,11 @@ LANG_GROUPS = {
     # so as BLOOM source langs they are unseen-by-pretraining (paper used XLM-R).
     'joshi5': ['eng_Latn', 'spa_Latn', 'deu_Latn', 'fra_Latn', 'jpn_Jpan', 'zho_Hans', 'arb_Arab'],
 
+    # EnArZho (paper sec. 4): a compact, high-resource, typologically diverse set
+    # of English, Arabic, Mandarin Chinese. The smallest source group (subset of
+    # joshi5 / seen). Paper reduces training langs to 3 to probe the SPT/XPE mix.
+    'enarzho': ['eng_Latn', 'arb_Arab', 'zho_Hans'],
+
     # BLOOM/BLOOMZ pretraining (ROOTS) languages, intersected with Belebele's
     # 122 (39 langs). Native scripts only (romanized *_Latn dups dropped);
     # Arabic = MSA arb_Arab only (not the dialectal acm/apc/ars/ary/arz); both
@@ -298,8 +303,21 @@ def tune_phase(tune_config, source_langs_sorted):
     # Capture the seed the HF Trainer actually used. The toolkit randomizes it
     # per run (runner.py) unless training_args.full_determinism is set, so this
     # is the only record of which seed produced this adapter.
-    seed = getattr(getattr(getattr(trainer, 'trainer', None), 'args', None), 'seed', None)
-    return model.uuid4, model.path, seed
+    hf = getattr(trainer, 'trainer', None)
+    seed = getattr(getattr(hf, 'args', None), 'seed', None)
+    # Best validation metric (== best val accuracy, since metric_for_best_model
+    # +load_best_model_at_end). Find the eval step that achieved it from the log.
+    state = getattr(hf, 'state', None)
+    best_metric = getattr(state, 'best_metric', None)
+    metric_name = getattr(getattr(hf, 'args', None), 'metric_for_best_model', None)
+    best_step = None
+    if state is not None and best_metric is not None:
+        for rec in getattr(state, 'log_history', []) or []:
+            if any(k.endswith('/accuracy') and rec[k] == best_metric for k in rec):
+                best_step = rec.get('step')
+                break
+    val_res = {'best_val_acc': best_metric, 'best_step': best_step, 'metric': metric_name}
+    return model.uuid4, model.path, seed, val_res
 
 
 def wire_test_to_adapter(test_config, adapter_uuid4, adapter_path=None):
@@ -531,8 +549,9 @@ def run_xlt(
 
     seed_used = None
     if not skip_tune:
-        adapter_uuid4, adapter_path, seed_used = tune_phase(tune_config, source_langs_sorted)
-        print(f'[xlt] tuned: uuid4={adapter_uuid4} path={adapter_path} seed={seed_used}')
+        adapter_uuid4, adapter_path, seed_used, val_res = tune_phase(tune_config, source_langs_sorted)
+        print(f'[xlt] tuned: uuid4={adapter_uuid4} path={adapter_path} seed={seed_used} '
+              f'best_val_acc={val_res["best_val_acc"]}')
         run_dir.mkdir(parents=True, exist_ok=True)
         utils.dict_to_yaml_file({
             'run_name': run_name,
@@ -546,6 +565,20 @@ def run_xlt(
             'adapter_path': str(adapter_path),
             'tune_config': tune_config_source,
         }, str(run_dir / 'tune.yml'))
+        # One-row validation result: best val accuracy + the step it peaked at.
+        # Selection metric for the LR search lives here (see CLAUDE.md).
+        pd.DataFrame([{
+            'run_name': run_name_tag,
+            'method': (run_name_tag or '').split('_')[0] or None,
+            'run_group': run_group,
+            'llm': llm,
+            'fold': fold,
+            'seed': seed_used,
+            'learning_rate': getattr(tune_config.training_args.args, 'learning_rate', None),
+            'best_val_acc': val_res['best_val_acc'],
+            'best_step': val_res['best_step'],
+            'metric': val_res['metric'],
+        }]).to_csv(run_dir / 'valid_res.csv', index=False)
 
     if skip_test:
         print('[xlt] --skip-test: trained adapter saved, skipping test phase')
