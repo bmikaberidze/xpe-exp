@@ -28,11 +28,19 @@ Usage:
     python -m scripts.evals.unify_xlt_test_res \\
         artefacts/evals/xlt_runs/bloom/joshi5/9_bebe_grid_bloomz \\
         --zero-shot-path artefacts/evals/xlt_runs/bloom/zero/0_zero_shot_eval
+
     python -m scripts.evals.unify_xlt_test_res <path>   # fallback if no folds/seeds
 
+    # BloomZ
     python -m scripts.evals.unify_xlt_test_res \
         artefacts/evals/xlt_runs/bloom/joshi5/11_bebe_grid_bloomz \
         --zero-shot-path /home/bmikaberidze/xpe-exp/artefacts/evals/xlt_runs/bloom/zero/0_zero_shot_eval/20260610_105627_zs_eval_seq
+
+    # Aya
+    python -m scripts.evals.unify_xlt_test_res \
+        artefacts/evals/xlt_runs/aya/aya_seen/12_bebe_grid_aya \
+        --zero-shot-path /home/bmikaberidze/xpe-exp/artefacts/evals/xlt_runs/aya/zero/0_zero_shot_eval/20260508_075457_zs_eval
+
 """
 import argparse
 import re
