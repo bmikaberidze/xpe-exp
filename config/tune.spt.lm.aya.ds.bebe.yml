@@ -201,7 +201,7 @@ training_args:
             scale_parameter: false   # disable Adafactor's per-param LR rescaling
             relative_step: false     # disable Adafactor's internal LR schedule (external cosine drives LR)
             warmup_init: false       # only meaningful when relative_step=true
-        learning_rate: 0.5   # 10b winner (SPT, WD=0): best val acc both folds (fold0 0.8774, fold2 0.9274)
+        learning_rate: 1.0   # final pick: 1.0>0.5 (wins 13a enarzho .892 + aya_seen .877; 2.0 collapses)
         lr_scheduler_type: cosine
         warmup_ratio: 0.1
         weight_decay: 0

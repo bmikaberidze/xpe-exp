@@ -142,7 +142,7 @@ custom_training_args:
     eval_force_sequential: true
     test_force_sequential: true
     # Early Stopping
-    early_stopping_after: 0.25  # floor stop at 25% (step 1000) — past the ~300 peak; max_steps unchanged so LR picks stay valid
+    early_stopping_after: 0.5  # floor: no early stop before 50% of steps (uniform across all 6 configs)
     early_stopping_patience: 5
     early_stopping_threshold: 0.0
     early_stopping_metric: metric_for_best_model # stop on ACCURACY (sentinel), consistent w/ load_best_model_at_end; else callback defaults to eval_loss
