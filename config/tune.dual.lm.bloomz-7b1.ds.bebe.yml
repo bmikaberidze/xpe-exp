@@ -93,7 +93,7 @@ ds:
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     comes_with_splits:
         train: true
-        test: false
+        test: true
         validation: true
     input:
         key: text
@@ -112,7 +112,7 @@ eval:
     before_training_on_test: false
     during_training: null
     after_training: false
-    after_training_on_test: false
+    after_training_on_test: true
     per_task: null
     downstream_tasks: false
 
