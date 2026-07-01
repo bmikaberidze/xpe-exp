@@ -145,6 +145,7 @@ custom_training_args:
     early_stopping_after: 0.5 # Don't allow early stopping before X% of total training steps.
     early_stopping_patience: 5
     early_stopping_threshold: 0.0
+    early_stopping_metric: metric_for_best_model # stop on ACCURACY (sentinel), consistent w/ load_best_model_at_end; else callback defaults to eval_loss
     # Final Model Saving
     save_final_model: true
     keep_only_final_model: true
@@ -159,7 +160,7 @@ training_args:
     args:
         # Epochs
         num_train_epochs: 10  # ignored at runtime — max_steps overrides — but the toolkit's config wrapper expects this key to be present
-        max_steps: 4000
+        max_steps: 2400  # full grid (14a/14b): headroom for bloom_seen peak (~1.5k) + acc early-stop trims fast groups; LR-sanity (13a/b) used 4000
 
         # Batch Size — reduced vs xsc (max_length 1024) because Belebele
         # passages are ~4x longer; effective batch 32 preserved via accumulation.

@@ -1,0 +1,104 @@
+# FULL Belebele self-split grid (Aya-Expanse-8b) -- the final XLT spectrum.
+# Axes baked into THIS matrix (60 cells): method x fold x seed
+#   method = xpe, spt, d30 (encoder_ratio 0.3), d70 (encoder_ratio 0.7)   [4]
+#   fold   = 0,1,2  (item-disjoint self-split; aggregator POOLS -> 900 items)    [3]
+#   seed   = 10..14 (replication axis -> error bars)                             [5]
+# The SOURCE-GROUP axis is dispatched separately (one array per --source-group):
+#   enarzho (3) | joshi5 (7) | aya_seen (24)                                     [3]
+# => full aya spectrum = 60 x 3 = 180 runs. (bloomz twin = 14b; grand total 360.)
+#
+# LRs = LR-search/13a winners (kept; 13a confirmed they transfer across groups):
+#   XPE  lr=1e-3 (tune.xpe...), SPT lr=0.5 (tune.spt..., WD=0),
+#   DUAL base lr=0.5 (SPT part) + xpe-group lr=1e-3, encoder_ratio 0.3/0.7 via override.
+# max_steps=2400 (trimmed from 4000; 13a/13b showed val-acc peaks <2k for ALL groups).
+# Select on VALIDATION accuracy (metric_for_best_model=accuracy); test runs per fold.
+#
+# !! AYA NEEDS >80 GB VRAM -> sbatch MUST pin the big-VRAM partition, else OOM.
+#
+# Dispatch (run all THREE groups; %10 throttle for big-VRAM contention):
+#   for G in enarzho joshi5 aya_seen; do \
+#     sbatch --array=0-59%10 --partition=B200,H200,H200-PCI,H100-PCI,H100-Trails \
+#       runtime/clusters/pegasus/shell/run.sh --site-packages \
+#         "python -m scripts.run_xlt_meta \
+#             --meta-config ./config/meta/14a_bebe_grid_full_aya.yml \
+#             --test-config ./config/test.lm.aya.ds.bebe.fold.yml \
+#             --source-group $G"; \
+#   done
+#
+# Aggregate (per group dir): unify_xlt_test_res.py  (--zero-shot-path <aya zero-shot>)
+
+tune_configs:
+  xpe:    ./config/tune.xpe.lm.aya.ds.bebe.yml
+  spt:    ./config/tune.spt.lm.aya.ds.bebe.yml
+  d30: ./config/tune.dual.lm.aya.ds.bebe.yml
+  d70: ./config/tune.dual.lm.aya.ds.bebe.yml
+
+matrix:
+
+  # ===== xpe x fold{0,1,2} x seed{10..14} =====
+  - {tune_method: xpe, run_name: xpe_f0_s10, fold: 0, seed: 10}
+  - {tune_method: xpe, run_name: xpe_f0_s11, fold: 0, seed: 11}
+  - {tune_method: xpe, run_name: xpe_f0_s12, fold: 0, seed: 12}
+  - {tune_method: xpe, run_name: xpe_f0_s13, fold: 0, seed: 13}
+  - {tune_method: xpe, run_name: xpe_f0_s14, fold: 0, seed: 14}
+  - {tune_method: xpe, run_name: xpe_f1_s10, fold: 1, seed: 10}
+  - {tune_method: xpe, run_name: xpe_f1_s11, fold: 1, seed: 11}
+  - {tune_method: xpe, run_name: xpe_f1_s12, fold: 1, seed: 12}
+  - {tune_method: xpe, run_name: xpe_f1_s13, fold: 1, seed: 13}
+  - {tune_method: xpe, run_name: xpe_f1_s14, fold: 1, seed: 14}
+  - {tune_method: xpe, run_name: xpe_f2_s10, fold: 2, seed: 10}
+  - {tune_method: xpe, run_name: xpe_f2_s11, fold: 2, seed: 11}
+  - {tune_method: xpe, run_name: xpe_f2_s12, fold: 2, seed: 12}
+  - {tune_method: xpe, run_name: xpe_f2_s13, fold: 2, seed: 13}
+  - {tune_method: xpe, run_name: xpe_f2_s14, fold: 2, seed: 14}
+
+  # ===== spt x fold{0,1,2} x seed{10..14} =====
+  - {tune_method: spt, run_name: spt_f0_s10, fold: 0, seed: 10}
+  - {tune_method: spt, run_name: spt_f0_s11, fold: 0, seed: 11}
+  - {tune_method: spt, run_name: spt_f0_s12, fold: 0, seed: 12}
+  - {tune_method: spt, run_name: spt_f0_s13, fold: 0, seed: 13}
+  - {tune_method: spt, run_name: spt_f0_s14, fold: 0, seed: 14}
+  - {tune_method: spt, run_name: spt_f1_s10, fold: 1, seed: 10}
+  - {tune_method: spt, run_name: spt_f1_s11, fold: 1, seed: 11}
+  - {tune_method: spt, run_name: spt_f1_s12, fold: 1, seed: 12}
+  - {tune_method: spt, run_name: spt_f1_s13, fold: 1, seed: 13}
+  - {tune_method: spt, run_name: spt_f1_s14, fold: 1, seed: 14}
+  - {tune_method: spt, run_name: spt_f2_s10, fold: 2, seed: 10}
+  - {tune_method: spt, run_name: spt_f2_s11, fold: 2, seed: 11}
+  - {tune_method: spt, run_name: spt_f2_s12, fold: 2, seed: 12}
+  - {tune_method: spt, run_name: spt_f2_s13, fold: 2, seed: 13}
+  - {tune_method: spt, run_name: spt_f2_s14, fold: 2, seed: 14}
+
+  # ===== d30 x fold{0,1,2} x seed{10..14} =====
+  - {tune_method: d30, run_name: d30_f0_s10, fold: 0, seed: 10, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f0_s11, fold: 0, seed: 11, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f0_s12, fold: 0, seed: 12, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f0_s13, fold: 0, seed: 13, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f0_s14, fold: 0, seed: 14, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s10, fold: 1, seed: 10, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s11, fold: 1, seed: 11, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s12, fold: 1, seed: 12, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s13, fold: 1, seed: 13, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s14, fold: 1, seed: 14, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s10, fold: 2, seed: 10, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s11, fold: 2, seed: 11, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s12, fold: 2, seed: 12, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s13, fold: 2, seed: 13, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s14, fold: 2, seed: 14, overrides: {peft.encoder_ratio: 0.3}}
+
+  # ===== d70 x fold{0,1,2} x seed{10..14} =====
+  - {tune_method: d70, run_name: d70_f0_s10, fold: 0, seed: 10, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f0_s11, fold: 0, seed: 11, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f0_s12, fold: 0, seed: 12, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f0_s13, fold: 0, seed: 13, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f0_s14, fold: 0, seed: 14, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s10, fold: 1, seed: 10, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s11, fold: 1, seed: 11, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s12, fold: 1, seed: 12, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s13, fold: 1, seed: 13, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s14, fold: 1, seed: 14, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s10, fold: 2, seed: 10, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s11, fold: 2, seed: 11, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s12, fold: 2, seed: 12, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s13, fold: 2, seed: 13, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s14, fold: 2, seed: 14, overrides: {peft.encoder_ratio: 0.7}}
