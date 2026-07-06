@@ -16,6 +16,17 @@ on prior summaries in this conversation; quote the section/table you used.
   count = the architectural-not-parametric proof), DUAL balances; fewer source langs
   shift the advantage from XPE toward SPT/DUAL.
 
+## Current experimental path: bebe → bebe (xsc→bebe is DROPPED)
+
+- The earlier decoder pipeline (train on XStoryCloze → test on Belebele) is **abandoned**:
+  task-type mismatch (2-choice cloze vs 4-choice RC) → no cross-lingual transfer
+  (held-out ≈ zero-shot). `*.ds.xsc.yml` configs are legacy.
+- Current design mirrors the paper (task fixed, language transfers): **train AND test on
+  Belebele**. Source (seen) langs use item-disjoint fold splits (train500/val100/test300);
+  the 3 folds' test blocks tile the 900 parallel items, so **every item serves as a test
+  item exactly once** (pool folds → full 900 per lang). Unseen targets are evaluated
+  cross-lingually on the same fold test splits.
+
 ## Run environment
 
 Run repo scripts and tests with the **default `python` / `python3`** directly — no venv, no `source activate`:
@@ -60,6 +71,17 @@ builds on) — **we maintain it alongside this repo**, it is not a frozen third-
   sibling take effect here immediately (no reinstall).
 - When behavior traces into `MODEL` / `TRAINER` / `DATASET` / `PEFT` / fold or seed plumbing,
   the source is in the sibling — read/edit it there, not only in this repo's `scripts/`.
+- **XPE/SPT/DUAL are ALL one class — `CrossPromptEncoder`** (`models/xpe/encoder.py`); all
+  three tune configs set `peft_type: XPE` and differ only by `encoder_ratio` (the XPE
+  fraction of the virtual tokens): **SPT = 0** (plain soft prompt, `reparam=NONE`, uses
+  `self.embedding`), **XPE = 1** (`self.xpe_embedding` → `xpe_head` MLP), **DUAL = 0<r<1**
+  (e.g. 0.3 or 0.7 — a free hyperparam, NOT tied to the dataset; concat of both).
+  So "SPT" is NOT a separate module.
+  Consequence: anything gated on `isinstance(pe, CrossPromptEncoder)` fires for SPT too —
+  e.g. the `normalize_embeddings()` clip/unit callback (`training/callbacks.py:151`) DOES
+  clip SPT's `self.embedding` rows (name has `'embedding'`, 2D, `requires_grad`). SPT-clip
+  is a real experiment, not a no-op; it only *looks* identical to SPT-base when the row
+  norms never exceed `max_norm`.
 
 ## Repository layout
 
