@@ -8,8 +8,8 @@
 # => full aya spectrum = 60 x 3 = 180 runs. (bloomz twin = 14b; grand total 360.)
 #
 # LRs = LR-search/13a winners (kept; 13a confirmed they transfer across groups):
-#   XPE  lr=1e-3 (tune.xpe...), SPT lr=0.5 (tune.spt..., WD=0),
-#   DUAL base lr=0.5 (SPT part) + xpe-group lr=1e-3, encoder_ratio 0.3/0.7 via override.
+#   XPE  lr=5e-4 (tune.xpe...), SPT lr=1.0 (tune.spt..., WD=0),
+#   DUAL base lr=1.0 (SPT part) + xpe-group lr=5e-4, encoder_ratio 0.3/0.7 via override.
 # max_steps=2400 (trimmed from 4000; 13a/13b showed val-acc peaks <2k for ALL groups).
 # Select on VALIDATION accuracy (metric_for_best_model=accuracy); test runs per fold.
 #

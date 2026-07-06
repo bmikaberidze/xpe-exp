@@ -47,7 +47,7 @@ peft:
     encoder_dropout: 0.1 # (`float`): The dropout probability of the prompt encoder.
     #
     ## CrossPromptEncoderConfig(PromptEncoderConfig): This is the configuration class to store the configuration of a [`CrossPromptEncoder`].
-    encoder_ratio: 0.3
+    encoder_ratio: 0.7
     encoder_input_size: null
     encoder_init_state_dict_path: null
     encoder_freeze: false

@@ -1,0 +1,54 @@
+# STABILIZATION PROBE (Aya-Expanse-8b) -- does taming eval-loss/param_norm help TEST acc?
+# Testbed: aya x enarzho (3 langs = strongest overfit, fastest). WITH XLT test (no
+# --skip-test) + seen-test300 (eval.after_training_on_test). 3 arms x {xpe,spt} x 3 seeds.
+#   base : current config (no reg)                       -> baseline w/ test enabled
+#   ls   : label_smoothing_factor=0.1 (loss-level; tames overconfidence; method-agnostic)
+#   clip : encoder_embedding_normalize=clip, max_norm=80 (caps the dominant embedding norm;
+#          best-val row-norm ~64, end-of-train ~780 => clip@80 blocks the ~12x blowup)
+# Monitor in wandb: eval/loss (flatten?), train/param_norm (capped?), eval acc,
+# seen-test300 acc, and XLT unseen test acc (raw.csv per lang). Compare arms.
+#
+# !! AYA needs >80 GB VRAM -> pin big-VRAM partition.
+# Dispatch (enarzho only for the probe):
+#   sbatch --array=0-17%18 --partition=B200,H200,H200-PCI,H100-PCI,H100-Trails \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m scripts.run_xlt_meta \
+#           --meta-config ./config/meta/15a_stab_probe_aya.yml \
+#           --test-config ./config/test.lm.aya.ds.bebe.fold.yml \
+#           --source-group enarzho --fold 0"
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.aya.ds.bebe.yml
+  spt: ./config/tune.spt.lm.aya.ds.bebe.yml
+
+matrix:
+
+  # --- xpe base ---
+  - {tune_method: xpe, run_name: xpe_base_s10, fold: 0, seed: 10}
+  - {tune_method: xpe, run_name: xpe_base_s11, fold: 0, seed: 11}
+  - {tune_method: xpe, run_name: xpe_base_s12, fold: 0, seed: 12}
+
+  # --- xpe ls ---
+  - {tune_method: xpe, run_name: xpe_ls_s10, fold: 0, seed: 10, overrides: {training_args.args.label_smoothing_factor: 0.1}}
+  - {tune_method: xpe, run_name: xpe_ls_s11, fold: 0, seed: 11, overrides: {training_args.args.label_smoothing_factor: 0.1}}
+  - {tune_method: xpe, run_name: xpe_ls_s12, fold: 0, seed: 12, overrides: {training_args.args.label_smoothing_factor: 0.1}}
+
+  # --- xpe clip ---
+  - {tune_method: xpe, run_name: xpe_clip_s10, fold: 0, seed: 10, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 80}}
+  - {tune_method: xpe, run_name: xpe_clip_s11, fold: 0, seed: 11, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 80}}
+  - {tune_method: xpe, run_name: xpe_clip_s12, fold: 0, seed: 12, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 80}}
+
+  # --- spt base ---
+  - {tune_method: spt, run_name: spt_base_s10, fold: 0, seed: 10}
+  - {tune_method: spt, run_name: spt_base_s11, fold: 0, seed: 11}
+  - {tune_method: spt, run_name: spt_base_s12, fold: 0, seed: 12}
+
+  # --- spt ls ---
+  - {tune_method: spt, run_name: spt_ls_s10, fold: 0, seed: 10, overrides: {training_args.args.label_smoothing_factor: 0.1}}
+  - {tune_method: spt, run_name: spt_ls_s11, fold: 0, seed: 11, overrides: {training_args.args.label_smoothing_factor: 0.1}}
+  - {tune_method: spt, run_name: spt_ls_s12, fold: 0, seed: 12, overrides: {training_args.args.label_smoothing_factor: 0.1}}
+
+  # --- spt clip ---
+  - {tune_method: spt, run_name: spt_clip_s10, fold: 0, seed: 10, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 80}}
+  - {tune_method: spt, run_name: spt_clip_s11, fold: 0, seed: 11, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 80}}
+  - {tune_method: spt, run_name: spt_clip_s12, fold: 0, seed: 12, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 80}}
