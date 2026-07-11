@@ -45,6 +45,12 @@ def aggregate(df: pd.DataFrame, group_key: str = 'learning_rate') -> pd.DataFram
         raise ValueError(f'valid_res rows missing columns: {sorted(missing)} '
                          f'(have {list(df.columns)})')
     df = df.dropna(subset=['best_val_acc'])
+    # A crashed run and its completed re-run each write a valid_res.csv for the
+    # SAME (method, group_key, fold, seed); collect() concatenates in path order
+    # (ascending timestamp), so keep='last' retains the latest = the re-run and
+    # counts every seed exactly once. (LR-search runs are unique per lr, so this
+    # is a no-op there.)
+    df = df.drop_duplicates(subset=['method', group_key, 'fold', 'seed'], keep='last')
     rows = []
     for (method, key, fold), x in df.groupby(['method', group_key, 'fold']):
         rows.append({
