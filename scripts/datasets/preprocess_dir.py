@@ -9,8 +9,9 @@ for each language under it tokenizes every dataset found there:
   - any item-disjoint fold subdirs `fold{f}/` written by
     `scripts.datasets.split_bebe_folds` (the cross-lingual-transfer folds).
 
-Datasets without folds (e.g. xstory_cloze) just get the single DatasetDict
-tokenized, so this stays backward compatible. Each target is tokenized into its
+Datasets without folds (e.g. xstory_cloze, or SIB-200, which ships official
+701/99/204 splits) just get the single DatasetDict tokenized, so this stays
+backward compatible. Each target is tokenized into its
 own `tokenized|<vendor>|<model>` subdir; what was found is logged, not silent.
 
 Config Files:
@@ -18,10 +19,13 @@ proc.ds.xsc.tok.aya.yml
 proc.ds.xsc.tok.bloom.yml
 proc.ds.bebe.tok.aya.yml
 proc.ds.bebe.tok.bloom.yml
+proc.ds.sib.tok.mdeberta.yml
+proc.ds.sib.tok.mgte.yml
 
-Usage:
-/home/bmikaberidze/.venv/bin/python -m scripts.datasets.preprocess_dir \
-    --config ./config/{config_file}
+Usage (never on the login node -- see CLAUDE.md "Run environment"):
+sbatch --array=0 --mem=30G --wait \
+    runtime/clusters/pegasus/shell/run.sh --site-packages --no-gpu \
+      "python -m scripts.datasets.preprocess_dir --config ./config/{config_file}"
 """
 
 if __name__ == '__main__':

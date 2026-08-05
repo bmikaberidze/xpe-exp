@@ -13,8 +13,10 @@ This module owns all splitting logic; `reframe_bebe_to_ftp` stays fold-agnostic.
 Output layout (per language, per fold):
     benchmarks/mcqa/belebele_ftp/<lang>/fold{f}/   # DatasetDict{train,validation,test}
 
-Usage:
-    /home/bmikaberidze/.venv/bin/python -m scripts.datasets.split_bebe_folds
+Usage (never on the login node -- see CLAUDE.md "Run environment"):
+    sbatch --array=0 --mem=30G --wait \
+        runtime/clusters/pegasus/shell/run.sh --site-packages --no-gpu \
+          "python -m scripts.datasets.split_bebe_folds"
 """
 
 import random
