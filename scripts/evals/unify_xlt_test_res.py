@@ -9,9 +9,12 @@ Two modes, chosen automatically by what the runs carry:
     2. Mean +/- std ACROSS seeds within (method, target_lang). Seeds are the
        only independent replication, so std lives only here.
     Output (beside PATH unless --out-prefix given) -- a SINGLE file, one row per
-    target_lang. A binary `seen` flag (1 iff the target lang is in the backbone's
-    pretraining-seen set, per LANG_GROUPS bloom_seen/aya_seen keyed on the `llm`
-    column) follows target_lang. Then ALL <method>_acc columns, ALL <method>_std
+    target_lang. A tri-state `seen` flag follows target_lang: 1 = in the
+    backbone's pretraining-seen set (LANG_GROUPS bloom_seen/aya_seen, keyed on
+    the `llm` column), 0 = unseen, -1 = unseen AND in the backbone's
+    low-performing set (LOW_PERF_LANG_GROUPS). Low-perf refines unseen, so
+    `seen <= 0` is the unseen slice and `seen == -1` the low-perf slice.
+    Then ALL <method>_acc columns, ALL <method>_std
     columns, and the shared n_seeds and n_items (pooled item count, e.g. 3 folds
     x 300 = 900):
       <prefix>.csv  target_lang, seen, zero_shot_acc, xpe_acc, spt_acc, dual_acc,
@@ -48,7 +51,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts.run_xlt import LANG_GROUPS
+from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
 TIMESTAMP_RE = re.compile(r'^\d{8}_\d{6}_')
 SEEDFOLD_RE = re.compile(r'_f\d+_s\d+$')
@@ -137,7 +140,7 @@ def pool_zero_shot(df: pd.DataFrame) -> pd.DataFrame:
 
 # method column order: zero_shot (the baseline) first, then the studied PEFT
 # methods, then anything else alphabetically.
-METHOD_ORDER = ['zero_shot', 'xpe', 'spt', 'dual']
+METHOD_ORDER = ['zero_shot', 'spt', 'd30', 'd70', 'xpe', 'dual']
 
 
 def _method_sort_key(m: str):
@@ -188,16 +191,50 @@ def seen_langs_for(llm: str) -> set[str]:
     return set(LANG_GROUPS[group])
 
 
-def add_seen(wide: pd.DataFrame, seen_langs) -> pd.DataFrame:
-    """Insert a binary `seen` column right after target_lang: 1 if the target
-    language is in the backbone's pretraining-seen set, else 0."""
-    flag = wide['target_lang'].isin(set(seen_langs)).astype(int)
+def low_perf_langs_for(llm: str) -> set[str]:
+    """Low-performing Belebele target langs for a backbone, from
+    LOW_PERF_LANG_GROUPS. Empty set when the backbone has no list yet."""
+    return set(LOW_PERF_LANG_GROUPS.get(llm, ()))
+
+
+def add_seen(wide: pd.DataFrame, seen_langs, low_perf_langs=()) -> pd.DataFrame:
+    """Insert a tri-state `seen` column right after target_lang:
+
+         1  target lang is in the backbone's pretraining-seen set
+         0  unseen by pretraining
+        -1  unseen AND in the backbone's low-performing set
+
+    Low-perf is a strict subset of unseen, so -1 refines 0 (an `unseen` slice is
+    `seen <= 0`, a `low-perf` slice is `seen == -1`). A lang appearing in both
+    the seen and low-perf lists is a config error and raises."""
+    seen_langs, low_perf_langs = set(seen_langs), set(low_perf_langs)
+    clash = seen_langs & low_perf_langs
+    if clash:
+        raise ValueError(f'langs in both the seen and low-perf groups: {sorted(clash)}')
+    flag = wide['target_lang'].isin(seen_langs).astype(int)
+    flag = flag.mask(wide['target_lang'].isin(low_perf_langs), -1)
     wide.insert(1, 'seen', flag)
     return wide
 
 
-def write_aggregate(path: Path, prefix: Path, zero_shot_path: Path | None) -> None:
+def restrict_to_seeds(df: pd.DataFrame, seeds) -> pd.DataFrame:
+    """Keep only the given seeds. Used to reproduce an earlier, smaller-n table
+    from a grid that has since been extended (e.g. the first 5 of 10 seeds) --
+    the seed axis is the replication axis, so dropping seeds is a valid, if less
+    powered, aggregate. Raises if a requested seed is absent, so a typo cannot
+    silently shrink n."""
+    seeds = {int(s) for s in seeds}
+    missing = seeds - set(df['seed'].dropna().astype(int))
+    if missing:
+        raise ValueError(f'seeds not present in the runs: {sorted(missing)}')
+    return df[df['seed'].astype(int).isin(seeds)]
+
+
+def write_aggregate(path: Path, prefix: Path, zero_shot_path: Path | None,
+                    seeds=None) -> None:
     grid = collect(path)
+    if seeds:
+        grid = restrict_to_seeds(grid, seeds)
     long = seed_mean_std(pool_folds(grid))
     if zero_shot_path is not None:
         # zero-shot is evaluated on all langs; keep only the grid's target langs
@@ -207,7 +244,8 @@ def write_aggregate(path: Path, prefix: Path, zero_shot_path: Path | None) -> No
         long = pd.concat([long, zs], ignore_index=True)
 
     long = long.sort_values(['target_lang', 'method'])
-    wide = add_seen(to_wide(long), seen_langs_for(backbone(grid)))
+    llm = backbone(grid)
+    wide = add_seen(to_wide(long), seen_langs_for(llm), low_perf_langs_for(llm))
     out = f'{prefix}.csv'
     wide.to_csv(out, index=False)
 
@@ -264,14 +302,18 @@ def main() -> None:
                     help='root to walk for existing zero-shot raw.csv files (aggregate mode only)')
     ap.add_argument('--out-prefix', type=Path, default=None,
                     help='output prefix (default: PATH/test_unified)')
+    ap.add_argument('--seeds', default=None,
+                    help='comma-separated seeds to keep, e.g. 10,11,12,13,14 '
+                         '(aggregate mode only; default = every seed present)')
     ap.add_argument('--key', default='target_lang', help='row-alignment column (fallback mode)')
     ap.add_argument('--value', default='accuracy', help='value column (fallback mode)')
     args = ap.parse_args()
 
     prefix = args.out_prefix or (args.path / 'test_unified')
+    seeds = [int(s) for s in args.seeds.split(',')] if args.seeds else None
 
     if has_fold_seed(collect(args.path)):
-        write_aggregate(args.path, prefix, args.zero_shot_path)
+        write_aggregate(args.path, prefix, args.zero_shot_path, seeds)
     else:
         if args.zero_shot_path is not None:
             print('warning: --zero-shot-path ignored in fallback mode (no fold/seed columns)')

@@ -2,13 +2,14 @@
 import math
 
 import pandas as pd
+import pytest
 
 from scripts.evals.unify_xlt_test_res import (
     parse_method, has_fold_seed, pool_folds, seed_mean_std, pool_zero_shot,
     column_name, unify_runs, to_wide, restrict_to_langs,
-    backbone, seen_langs_for, add_seen,
+    backbone, seen_langs_for, add_seen, low_perf_langs_for, restrict_to_seeds,
 )
-from scripts.run_xlt import LANG_GROUPS
+from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
 
 # --- method parsing ---------------------------------------------------------
@@ -113,9 +114,9 @@ def test_to_wide_one_row_per_lang_with_method_cols():
     out = to_wide(_long_df())
     # one row per language
     assert list(out['target_lang']) == ['deu_Latn', 'fra_Latn']
-    # all accs first (xpe before spt), then all stds, then shared counts
+    # all accs first (METHOD_ORDER: spt before xpe), then all stds, then counts
     assert list(out.columns) == [
-        'target_lang', 'xpe_acc', 'spt_acc', 'xpe_std', 'spt_std', 'n_seeds', 'n_items'
+        'target_lang', 'spt_acc', 'xpe_acc', 'spt_std', 'xpe_std', 'n_seeds', 'n_items'
     ]
     deu = out.set_index('target_lang').loc['deu_Latn']
     assert math.isclose(deu['xpe_acc'], 0.55) and math.isclose(deu['xpe_std'], 0.05)
@@ -134,8 +135,8 @@ def test_to_wide_zero_shot_first_and_acc_only():
     out = to_wide(pd.DataFrame(rows))
     assert list(out.columns) == [
         'target_lang',
-        'zero_shot_acc', 'xpe_acc', 'spt_acc', 'dual_acc',
-        'xpe_std', 'spt_std', 'dual_std',
+        'zero_shot_acc', 'spt_acc', 'xpe_acc', 'dual_acc',
+        'spt_std', 'xpe_std', 'dual_std',
         'n_seeds', 'n_items',
     ]
 
@@ -169,6 +170,62 @@ def test_add_seen_flags_per_backbone():
     assert out.set_index('target_lang')['seen'].to_dict() == {'deu_Latn': 0, 'acm_Arab': 0}
     out_aya = add_seen(wide.copy(), seen_langs_for('aya'))
     assert out_aya.set_index('target_lang')['seen']['deu_Latn'] == 1
+
+
+def test_low_perf_langs_for_uses_lang_groups():
+    # source of truth = LOW_PERF_LANG_GROUPS, keyed on the llm column
+    assert low_perf_langs_for('bloom') == set(LOW_PERF_LANG_GROUPS['bloom'])
+    assert low_perf_langs_for('aya') == set(LOW_PERF_LANG_GROUPS['aya'])
+    assert low_perf_langs_for('nosuchllm') == set()  # no list yet -> no -1 rows
+
+
+def test_low_perf_groups_are_a_subset_of_unseen():
+    # the -1 refinement only makes sense if low-perf never overlaps the seen set
+    # (or joshi5, which is always a source group), for either backbone
+    for llm, seen_group in [('aya', 'aya_seen'), ('bloom', 'bloom_seen')]:
+        low = set(LOW_PERF_LANG_GROUPS[llm])
+        assert not low & set(LANG_GROUPS[seen_group])
+        assert not low & set(LANG_GROUPS['joshi5'])
+
+
+def test_add_seen_marks_low_perf_minus_one():
+    wide = pd.DataFrame([
+        {'target_lang': 'deu_Latn', 'xpe_acc': 0.5},   # aya-seen
+        {'target_lang': 'acm_Arab', 'xpe_acc': 0.6},   # unseen, not low-perf
+        {'target_lang': 'amh_Ethi', 'xpe_acc': 0.3},   # unseen AND low-perf
+    ])
+    out = add_seen(wide.copy(), seen_langs_for('aya'), low_perf_langs_for('aya'))
+    assert out.set_index('target_lang')['seen'].to_dict() == {
+        'deu_Latn': 1, 'acm_Arab': 0, 'amh_Ethi': -1,
+    }
+
+
+def test_add_seen_low_perf_refines_unseen_not_replaces_it():
+    # `seen <= 0` must still select every unseen lang, low-perf included
+    wide = pd.DataFrame([{'target_lang': 'acm_Arab'}, {'target_lang': 'amh_Ethi'},
+                         {'target_lang': 'deu_Latn'}])
+    out = add_seen(wide.copy(), seen_langs_for('aya'), low_perf_langs_for('aya'))
+    assert sorted(out[out['seen'] <= 0]['target_lang']) == ['acm_Arab', 'amh_Ethi']
+    assert list(out[out['seen'] == -1]['target_lang']) == ['amh_Ethi']
+
+
+def test_add_seen_rejects_lang_in_both_groups():
+    wide = pd.DataFrame([{'target_lang': 'deu_Latn'}])
+    with pytest.raises(ValueError, match='both'):
+        add_seen(wide, {'deu_Latn'}, {'deu_Latn'})
+
+
+def test_restrict_to_seeds_keeps_only_given():
+    grid = pd.DataFrame([{'seed': s, 'accuracy': 0.5} for s in [10, 11, 12, 13, 14, 15]])
+    out = restrict_to_seeds(grid, [10, 11, 12, 13, 14])
+    assert sorted(out['seed']) == [10, 11, 12, 13, 14]
+
+
+def test_restrict_to_seeds_rejects_absent_seed():
+    # a typo must not silently shrink n instead of erroring
+    grid = pd.DataFrame([{'seed': s} for s in [10, 11]])
+    with pytest.raises(ValueError, match='not present'):
+        restrict_to_seeds(grid, [10, 99])
 
 
 def test_restrict_to_langs_keeps_only_given():
