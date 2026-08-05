@@ -72,15 +72,27 @@ SLURM_ARRAY_TASK_ID = 'SLURM_ARRAY_TASK_ID'
 # --source-langs list. The group name also becomes the run-dir src_tag, so
 # artefact paths stay short. Add entries here as new anchor sets are needed.
 LANG_GROUPS = {
-    # Joshi et al. (2020) Class-5 ("The Winners"): the 7 highest-resource
-    # languages. Note: German + Japanese are NOT in BLOOM's ROOTS pretraining,
-    # so as BLOOM source langs they are unseen-by-pretraining (paper used XLM-R).
-    'joshi5': ['eng_Latn', 'spa_Latn', 'deu_Latn', 'fra_Latn', 'jpn_Jpan', 'zho_Hans', 'arb_Arab'],
 
     # EnArZho (paper sec. 4): a compact, high-resource, typologically diverse set
     # of English, Arabic, Mandarin Chinese. The smallest source group (subset of
     # joshi5 / seen). Paper reduces training langs to 3 to probe the SPT/XPE mix.
     'enarzho': ['eng_Latn', 'arb_Arab', 'zho_Hans'],
+
+    # Joshi et al. (2020) Class-5 ("The Winners"): the 7 highest-resource
+    # languages. Note: German + Japanese are NOT in BLOOM's ROOTS pretraining,
+    # so as BLOOM source langs they are unseen-by-pretraining (paper used XLM-R).
+    'joshi5': ['eng_Latn', 'spa_Latn', 'deu_Latn', 'fra_Latn', 'jpn_Jpan', 'zho_Hans', 'arb_Arab'],
+
+    # Aya Expanse (CohereLabs/aya-expanse-8b) 23 languages, intersected with
+    # Belebele's 122 (24 codes; all 23 present, Chinese as both scripts). Native
+    # scripts; MSA arb_Arab; Western Persian pes_Arab. The Aya analogue of the
+    # paper's "Seen" source group (for the aya backbone, not BLOOMZ).
+    'aya_seen': [
+        'eng_Latn', 'fra_Latn', 'spa_Latn', 'por_Latn', 'ita_Latn', 'deu_Latn',
+        'nld_Latn', 'ces_Latn', 'pol_Latn', 'ron_Latn', 'ell_Grek', 'rus_Cyrl',
+        'ukr_Cyrl', 'tur_Latn', 'arb_Arab', 'heb_Hebr', 'pes_Arab', 'hin_Deva',
+        'ind_Latn', 'vie_Latn', 'jpn_Jpan', 'kor_Hang', 'zho_Hans', 'zho_Hant',
+    ],
 
     # BLOOM/BLOOMZ pretraining (ROOTS) languages, intersected with Belebele's
     # 122 (39 langs). Native scripts only (romanized *_Latn dups dropped);
@@ -102,15 +114,133 @@ LANG_GROUPS = {
         'xho_Latn', 'yor_Latn', 'zul_Latn',
     ],
 
-    # Aya Expanse (CohereLabs/aya-expanse-8b) 23 languages, intersected with
-    # Belebele's 122 (24 codes; all 23 present, Chinese as both scripts). Native
-    # scripts; MSA arb_Arab; Western Persian pes_Arab. The Aya analogue of the
-    # paper's "Seen" source group (for the aya backbone, not BLOOMZ).
-    'aya_seen': [
-        'eng_Latn', 'fra_Latn', 'spa_Latn', 'por_Latn', 'ita_Latn', 'deu_Latn',
-        'nld_Latn', 'ces_Latn', 'pol_Latn', 'ron_Latn', 'ell_Grek', 'rus_Cyrl',
-        'ukr_Cyrl', 'tur_Latn', 'arb_Arab', 'heb_Hebr', 'pes_Arab', 'hin_Deva',
-        'ind_Latn', 'vie_Latn', 'jpn_Jpan', 'kor_Hang', 'zho_Hans', 'zho_Hant',
+    # --- SIB-200 encoder backbones -------------------------------------------
+    # The two groups below are the SIB-200 analogues of the paper's "Seen" set
+    # (xpe.pdf sec. 4.2: "Seen: The 92 languages that were included in the XLM-R
+    # pretraining corpus"). Both are materialised from src/sib200_meta.py
+    # (`seen_langs('mdeberta')` / `seen_langs('mgte')`); tests/test_lang_groups.py
+    # asserts the lists here still match that table.
+
+    # mDeBERTa-v3 (microsoft/mdeberta-v3-base) is pretrained on CC100 like XLM-R,
+    # so this group is taken to BE the published paper's Seen-92 -- which makes
+    # mDeBERTa the bridge row: same seen/unseen partition, new code. That is an
+    # assumption, not a documented identical language list (the model card says
+    # "the 2.5T CC100 data as XLM-R"; neither it nor the DeBERTaV3 paper states a
+    # language count, and mDeBERTa uses mT5's vocabulary). See src/sib200_meta.py.
+    'mdeberta_seen': [
+        'afr_Latn', 'als_Latn', 'amh_Ethi', 'arb_Arab', 'asm_Beng', 'azb_Arab',
+        'azj_Latn', 'bel_Cyrl', 'ben_Beng', 'bos_Latn', 'bul_Cyrl', 'cat_Latn',
+        'ces_Latn', 'cym_Latn', 'dan_Latn', 'deu_Latn', 'ell_Grek', 'eng_Latn',
+        'epo_Latn', 'est_Latn', 'eus_Latn', 'fin_Latn', 'fra_Latn', 'gaz_Latn',
+        'gla_Latn', 'gle_Latn', 'glg_Latn', 'guj_Gujr', 'hau_Latn', 'heb_Hebr',
+        'hin_Deva', 'hrv_Latn', 'hun_Latn', 'hye_Armn', 'ind_Latn', 'isl_Latn',
+        'ita_Latn', 'jav_Latn', 'jpn_Jpan', 'kan_Knda', 'kat_Geor', 'kaz_Cyrl',
+        'khk_Cyrl', 'khm_Khmr', 'kir_Cyrl', 'kmr_Latn', 'kor_Hang', 'lao_Laoo',
+        'lit_Latn', 'lvs_Latn', 'mal_Mlym', 'mar_Deva', 'mkd_Cyrl', 'mya_Mymr',
+        'nld_Latn', 'nno_Latn', 'nob_Latn', 'npi_Deva', 'ory_Orya', 'pan_Guru',
+        'pbt_Arab', 'pes_Arab', 'plt_Latn', 'pol_Latn', 'por_Latn', 'ron_Latn',
+        'rus_Cyrl', 'san_Deva', 'sin_Sinh', 'slk_Latn', 'slv_Latn', 'snd_Arab',
+        'som_Latn', 'spa_Latn', 'srp_Cyrl', 'sun_Latn', 'swe_Latn', 'swh_Latn',
+        'tam_Taml', 'tel_Telu', 'tha_Thai', 'tur_Latn', 'uig_Arab', 'ukr_Cyrl',
+        'urd_Arab', 'uzn_Latn', 'vie_Latn', 'xho_Latn', 'ydd_Hebr', 'zho_Hans',
+        'zho_Hant', 'zsm_Latn',
+    ],
+
+    # mGTE (Alibaba-NLP/gte-multilingual-mlm-base, Zhang et al. 2024) MLM
+    # pretraining data: 75 languages enumerated in Table 7 (App. A.1), all of
+    # which land in SIB-200. 76 codes because Chinese is counted as one language
+    # there but is two codes here (zho_Hans + zho_Hant), same convention as
+    # 'aya_seen'. mGTE's set is nearly a subset of XLM-R's: only ceb/hat/quy/tgl/
+    # yor are seen here and unseen for XLM-R, while 21 XLM-R langs are unseen
+    # here -- so mgte_unseen strictly extends the paper's Unseen group.
+    # Caveat kept in src/sib200_meta.py (MGTE_TOKENS_M): 5 of these are seen only
+    # nominally -- quy 0.07M, yor 0.04M, hat 0.03M, jav 0.62M, som 0.82M tokens.
+    'mgte_seen': [
+        'afr_Latn', 'als_Latn', 'arb_Arab', 'azj_Latn', 'bel_Cyrl', 'ben_Beng',
+        'bul_Cyrl', 'cat_Latn', 'ceb_Latn', 'ces_Latn', 'cym_Latn', 'dan_Latn',
+        'deu_Latn', 'ell_Grek', 'eng_Latn', 'est_Latn', 'eus_Latn', 'fin_Latn',
+        'fra_Latn', 'glg_Latn', 'guj_Gujr', 'hat_Latn', 'heb_Hebr', 'hin_Deva',
+        'hrv_Latn', 'hun_Latn', 'hye_Armn', 'ind_Latn', 'isl_Latn', 'ita_Latn',
+        'jav_Latn', 'jpn_Jpan', 'kan_Knda', 'kat_Geor', 'kaz_Cyrl', 'khk_Cyrl',
+        'khm_Khmr', 'kir_Cyrl', 'kor_Hang', 'lao_Laoo', 'lit_Latn', 'lvs_Latn',
+        'mal_Mlym', 'mar_Deva', 'mkd_Cyrl', 'mya_Mymr', 'nld_Latn', 'nob_Latn',
+        'npi_Deva', 'pan_Guru', 'pes_Arab', 'pol_Latn', 'por_Latn', 'quy_Latn',
+        'ron_Latn', 'rus_Cyrl', 'sin_Sinh', 'slk_Latn', 'slv_Latn', 'som_Latn',
+        'spa_Latn', 'srp_Cyrl', 'swe_Latn', 'swh_Latn', 'tam_Taml', 'tel_Telu',
+        'tgl_Latn', 'tha_Thai', 'tur_Latn', 'ukr_Cyrl', 'urd_Arab', 'vie_Latn',
+        'yor_Latn', 'zho_Hans', 'zho_Hant', 'zsm_Latn',
+    ],
+}
+
+
+# Per-backbone "low-performing" TARGET languages -- the analogue of the paper's
+# low-performing group, but defined empirically per decoder backbone (a lang can
+# be low-performing for BLOOMZ and not for Aya, so this is NOT one shared list).
+# These are TARGET groups, never source groups: they are disjoint from the
+# backbone's pretraining-seen set and from joshi5, i.e. low-perf is a strict
+# SUBSET of that backbone's unseen targets. Consumed by the result aggregators
+# (unify_xlt_test_res marks them `seen = -1`), not by the runner.
+LOW_PERF_LANG_GROUPS = {
+    'aya': [
+        # African (Niger-Congo / Afro-Asiatic / Nilotic)
+        'yor_Latn', 'gaz_Latn', 'xho_Latn', 'ibo_Latn', 'nya_Latn', 'tir_Ethi',
+        'sot_Latn', 'fuv_Latn', 'wol_Latn', 'zul_Latn', 'amh_Ethi', 'lug_Latn',
+        'nso_Latn', 'tsn_Latn', 'luo_Latn', 'lin_Latn', 'som_Latn', 'sna_Latn',
+        'ssw_Latn', 'kin_Latn', 'plt_Latn', 'bam_Latn', 'hau_Latn',
+        # Asian (non-Latin scripts)
+        'bod_Tibt', 'shn_Mymr', 'khk_Cyrl', 'lao_Laoo', 'mya_Mymr', 'khm_Khmr',
+        'kac_Latn', 'pbt_Arab', 'sin_Latn', 'tgk_Cyrl', 'tel_Telu', 'mri_Latn',
+        # romanized variants of otherwise-seen langs
+        'arb_Latn', 'npi_Latn', 'ben_Latn',
+    ],
+
+    'bloom': [
+        # Asian / non-Latin scripts
+        'bod_Tibt', 'sin_Sinh', 'lao_Laoo', 'shn_Mymr', 'kat_Geor', 'khm_Khmr',
+        'mya_Mymr', 'kac_Latn', 'hye_Armn', 'khk_Cyrl', 'ckb_Arab', 'kir_Cyrl',
+        'pbt_Arab', 'uzn_Latn', 'ilo_Latn', 'mri_Latn',
+        # African
+        'tir_Ethi', 'amh_Ethi', 'gaz_Latn', 'fuv_Latn', 'luo_Latn', 'som_Latn',
+        'hau_Latn', 'ssw_Latn', 'plt_Latn',
+        # European
+        'mlt_Latn',
+        # romanized variants of otherwise-seen langs
+        'arb_Latn', 'urd_Latn', 'sin_Latn', 'npi_Latn', 'ben_Latn',
+    ],
+
+    # --- SIB-200 encoder backbones -------------------------------------------
+    # Unlike the two Belebele lists above, the SIB-200 low-performing group is
+    # BENCHMARK-derived, not backbone-derived: xpe.pdf sec. 4.2 defines it as the
+    # SIB-200 languages scoring below 60% under full fine-tuning of XLM-R-large
+    # "reported in the original benchmark". So both encoders share one list --
+    # which is also what keeps these rows comparable to the published Table 1.
+    # The 46 codes come from the paper's appendix per-language tables (pp. 12-14,
+    # Group == 2); src/sib200_meta.py carries the same set as its `low_perf`
+    # column and tests/test_lang_groups.py asserts the two stay in sync.
+    'mdeberta': [
+        'ace_Arab', 'aka_Latn', 'arb_Latn', 'ayr_Latn', 'bam_Latn', 'bem_Latn',
+        'bjn_Arab', 'bod_Tibt', 'cjk_Latn', 'ckb_Arab', 'dyu_Latn', 'dzo_Tibt',
+        'ewe_Latn', 'fon_Latn', 'ibo_Latn', 'kab_Latn', 'kam_Latn', 'kbp_Latn',
+        'kik_Latn', 'kin_Latn', 'kmb_Latn', 'knc_Arab', 'lua_Latn', 'lug_Latn',
+        'min_Arab', 'mni_Beng', 'mos_Latn', 'mri_Latn', 'nqo_Nkoo', 'nso_Latn',
+        'nus_Latn', 'run_Latn', 'sat_Olck', 'shn_Mymr', 'smo_Latn', 'sna_Latn',
+        'sot_Latn', 'ssw_Latn', 'taq_Latn', 'taq_Tfng', 'tgk_Cyrl', 'tsn_Latn',
+        'tso_Latn', 'tzm_Tfng', 'umb_Latn', 'yor_Latn',
+    ],
+
+    # Same list minus yor_Latn, which mGTE DID see in pretraining (0.04M tokens
+    # -- nominally seen; see MGTE_TOKENS_M). Low-perf must stay a strict subset
+    # of the backbone's unseen set, and unify_xlt_test_res.add_seen() raises on
+    # a lang that is both seen and low-perf. 45 codes.
+    'mgte': [
+        'ace_Arab', 'aka_Latn', 'arb_Latn', 'ayr_Latn', 'bam_Latn', 'bem_Latn',
+        'bjn_Arab', 'bod_Tibt', 'cjk_Latn', 'ckb_Arab', 'dyu_Latn', 'dzo_Tibt',
+        'ewe_Latn', 'fon_Latn', 'ibo_Latn', 'kab_Latn', 'kam_Latn', 'kbp_Latn',
+        'kik_Latn', 'kin_Latn', 'kmb_Latn', 'knc_Arab', 'lua_Latn', 'lug_Latn',
+        'min_Arab', 'mni_Beng', 'mos_Latn', 'mri_Latn', 'nqo_Nkoo', 'nso_Latn',
+        'nus_Latn', 'run_Latn', 'sat_Olck', 'shn_Mymr', 'smo_Latn', 'sna_Latn',
+        'sot_Latn', 'ssw_Latn', 'taq_Latn', 'taq_Tfng', 'tgk_Cyrl', 'tsn_Latn',
+        'tso_Latn', 'tzm_Tfng', 'umb_Latn',
     ],
 }
 

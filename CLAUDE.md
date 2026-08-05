@@ -27,6 +27,42 @@ on prior summaries in this conversation; quote the section/table you used.
   item exactly once** (pool folds → full 900 per lang). Unseen targets are evaluated
   cross-lingually on the same fold test splits.
 
+## Second track: SIB-200 encoder backbones
+
+The journal extension adds **encoder** rows, because two decoders + one encoder is not
+a coherent story when the decoder gaps are small. Backbones: **`mdeberta`**
+(`microsoft/mdeberta-v3-base`) and **`mgte`** (`Alibaba-NLP/gte-multilingual-mlm-base`) —
+both base-size, both on **SIB-200 topic classification**, zero-shot XLT only.
+
+- **No folds.** SIB-200 ships official `train`/`validation`/`test` splits of
+  **701/99/204** per language. **Never pass `--fold`** — `apply_fold` raises when a
+  fold is given and `ds.dirs` has no `fold<N>` segment.
+- **Language metadata lives in `src/sib200_meta.py`**, not a CSV (`artefacts/` is
+  gitignored, `scripts/` holds code). 205 rows with `xlmr` (the paper's Seen-92) and
+  `low_perf` (the paper's 46, from the appendix Group==2 tags). `LANG_GROUPS` and
+  `LOW_PERF_LANG_GROUPS` in `scripts/run_xlt.py` are pinned to it by
+  `tests/test_lang_groups.py`.
+- **`mdeberta_seen` == the paper's Seen-92** (mDeBERTa trains on CC100 like XLM-R), so
+  mDeBERTa is the *bridge row* to the published Table 1: same partition, new code.
+  That equality is an assumption, not a documented identical language list — see the
+  docstring in `src/sib200_meta.py` before leaning on it in the write-up.
+- **Low-perf is benchmark-derived**, not backbone-derived (XLM-R-large full-FT < 60% in
+  the original SIB-200 benchmark), so both encoders share one list. `mgte` drops
+  `yor_Latn`, which it saw in pretraining (0.04M tokens).
+- **The legacy repo is the behavioral spec, and its YAML is NOT the whole recipe.**
+  `/fscratch/bmikaberidze/XPE` (`nlpka`) produced the published numbers, but
+  `nlpka/configs/scripts/xpe_utils.py`'s SLURM-task table **overrides the YAML at
+  runtime**: `optim: adafactor` (no `optim:` key in the YAML at all), `max_steps: 24000`
+  (not the YAML's 10 epochs), prompt-group `lr 5e-3 / wd 0.0` via
+  `optimizer_grouped_parameters` (`embedding` for SPT, `xpe_embedding` for XPE/DUAL),
+  early-stopping patience 20 for source, and 10 seeds. Read both before porting.
+- **`peft.modules_to_save` must include the pooler.** PEFT auto-saves only
+  `classifier`/`score` and freezes every other child; on both new backbones the head is
+  split across `pooler` (randomly initialised, absent from the checkpoint) and
+  `classifier`. XLM-R has no pooler, so the published runs never hit this.
+
+Plan: `docs/superpowers/plans/2026-08-05-sib200-encoder-backbones.md`.
+
 ## Run environment
 
 **NEVER run python on the login node. Every step goes through `sbatch` + an array,
@@ -88,6 +124,8 @@ VRAM groups (see the reference table at the bottom of `run.sh`):
   `--partition=B200,H200,H200-PCI,H100-PCI,H100-Trails`. Without it, jobs land on
   ≤80 GB nodes and OOM.
 - **Bloomz-7b1 fits in 80 GB** → default partition is fine, no override needed.
+- **The SIB-200 encoders (`mdeberta`, `mgte`) are base-size** → default partition, no
+  override needed.
 - **Any `run.sh` job needs ≥30 GB RAM** (the ~25 GB container image unpacks into
   node tmpfs and is charged to the job's cgroup) — never lower `--mem` below 30G,
   even for tiny CPU-only jobs like the unify scripts.
@@ -120,9 +158,9 @@ builds on) — **we maintain it alongside this repo**, it is not a frozen third-
 
 ```
 config/                         # all experiment configs (YAML)
-  tune.{xpe|spt|dual}.lm.{model}.ds.{xsc|bebe}.yml   # finetune a PEFT method
-  test.lm.{model}.ds.bebe[.fold].yml                 # eval; .fold = self-split test split
-  proc.ds.{xsc|bebe}.tok.{aya|bloom}.yml             # tokenize a benchmark per backbone
+  tune.{xpe|spt|dual}.lm.{model}.ds.{xsc|bebe|sib}.yml  # finetune a PEFT method
+  test.lm.{model}.ds.{bebe[.fold]|sib}.yml           # eval; .fold = self-split test split
+  proc.ds.{xsc|bebe|sib}.tok.{aya|bloom|mdeberta|mgte}.yml  # tokenize a benchmark per backbone
   meta/{N}[a|b]_*.yml             # metaconfigs (LR sweeps etc); stem = wandb run_group
 scripts/
   run_xlt.py                     # core: tune_phase, load_concat_dataset, discover_target_langs
@@ -130,12 +168,19 @@ scripts/
   evals/                         # plot/unify; unify_xlt_test_res.py (raw.csv: pool folds + seed std, else per-run fallback), unify_xlt_valid_res.py (valid_res.csv: per-fold mean, seed std)
                                  # aggregate_xlt_res.py: the per-lang test_unified.csv of all source groups -> ONE xlt_runs/{llm}/aggr_res.csv (target-group x source-group cells)
                                  # NOTE: quant.py / quant_boot_diff_sci.py are for REPRESENTATION evaluation (hidden-state analysis), NOT accuracy/eval-result significance — do not use them to test method-vs-method accuracy gaps.
-  datasets/                      # reframe_bebe_to_ftp -> split_bebe_folds -> preprocess_dir
+  datasets/                      # bebe: reframe_bebe_to_ftp -> split_bebe_folds -> preprocess_dir
+                                 # sib:  download_sib -> preprocess_dir  (no fold step)
+src/                             # importable helpers (NOT scripts): utils.py, hub_upload.py,
+                                 # sib200_meta.py (205-lang table: xlmr/Seen-92, low_perf/46)
 runtime/clusters/pegasus/shell/
   run.sh                         # SLURM+container wrapper (--site-packages, --no-gpu)
   run_minimal.sh                 # light CPU job
   logs/sbatch/{jobid}_{task}.{out,err}   # per-array-task logs; .out has eval metrics, run_name
 artefacts/                       # ALL data + outputs (datasets live here, not data/)
+  datasets/benchmarks/topic/sib200/          # SIB-200; official splits, NO folds
+    {lang}/                                  # 205 langs
+      {train,validation,test}/               # 701 / 99 / 204
+      tokenized|{org}|{model}/               # e.g. tokenized|microsoft|mdeberta-v3-base
   datasets/benchmarks/mcqa/{xstory_cloze_ftp,belebele_ftp}/
     {lang}/                                  # e.g. eng_Latn; 122 langs for belebele_ftp
       {train,validation,test}/               # unfolded root splits
