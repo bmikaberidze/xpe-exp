@@ -2,6 +2,7 @@
 import math
 
 import pandas as pd
+import pytest
 
 from scripts.evals.unify_xlt_valid_res import collect, aggregate
 
@@ -73,3 +74,43 @@ def test_collect_reads_valid_res_files(tmp_path):
     df = collect(tmp_path)
     assert len(df) == 2
     assert set(df['seed']) == {10, 11}
+
+
+# --- fold-less runs (SIB-200) -----------------------------------------------
+
+def _valid_rows(fold=None):
+    rows = []
+    for lr in (1e-5, 5e-5):
+        for seed, acc in ((11, 0.70), (12, 0.74)):
+            r = {'method': 'xpe', 'learning_rate': lr, 'seed': seed,
+                 'best_val_acc': acc + (0.05 if lr == 5e-5 else 0.0)}
+            if fold is not None:
+                r['fold'] = fold
+            rows.append(r)
+    return pd.DataFrame(rows)
+
+
+def test_aggregate_without_fold_column():
+    """SIB-200 runs have seeds but no folds; aggregation must still work."""
+    out = aggregate(_valid_rows())
+    assert len(out) == 2                      # one cell per learning_rate
+    assert set(out['n_seeds']) == {2}
+    best = out.loc[out['mean_val_acc'].idxmax()]
+    assert best['learning_rate'] == 5e-5
+    assert best['mean_val_acc'] == pytest.approx(0.77)
+
+
+def test_aggregate_with_all_nan_fold_column():
+    """run_xlt writes fold=None for SIB, which reads back as NaN."""
+    df = _valid_rows()
+    df['fold'] = float('nan')
+    out = aggregate(df)
+    assert len(out) == 2
+    assert set(out['n_seeds']) == {2}
+
+
+def test_aggregate_still_separates_real_folds():
+    df = pd.concat([_valid_rows(fold=0), _valid_rows(fold=1)], ignore_index=True)
+    out = aggregate(df)
+    assert len(out) == 4                      # 2 lrs x 2 folds, kept separate
+    assert sorted(out['fold'].unique()) == [0, 1]

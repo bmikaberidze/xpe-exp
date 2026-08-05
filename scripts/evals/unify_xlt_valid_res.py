@@ -38,12 +38,29 @@ def collect(path: Path) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
+def _with_fold_axis(df: pd.DataFrame) -> pd.DataFrame:
+    """Give fold-less runs a single implicit fold 0.
+
+    Belebele runs are folded and pass through untouched. SIB-200 has no fold
+    axis, and `run_xlt` writes `fold: None` for it, which reads back as NaN --
+    pandas `groupby` then DROPS those rows, leaving an empty frame. Synthesising
+    one fold keeps the grouping below identical for both benchmarks.
+    """
+    if 'fold' in df.columns and df['fold'].notna().any():
+        return df
+    return df.assign(fold=0)
+
+
 def aggregate(df: pd.DataFrame, group_key: str = 'learning_rate') -> pd.DataFrame:
-    """Mean +/- std (ddof=1) across seeds per (method, group_key, fold)."""
-    missing = {'method', 'fold', 'seed', 'best_val_acc', group_key} - set(df.columns)
+    """Mean +/- std (ddof=1) across seeds per (method, group_key, fold).
+
+    `fold` is optional: fold-less benchmarks collapse to a single fold 0.
+    """
+    missing = {'method', 'seed', 'best_val_acc', group_key} - set(df.columns)
     if missing:
         raise ValueError(f'valid_res rows missing columns: {sorted(missing)} '
                          f'(have {list(df.columns)})')
+    df = _with_fold_axis(df)
     df = df.dropna(subset=['best_val_acc'])
     # A crashed run and its completed re-run each write a valid_res.csv for the
     # SAME (method, group_key, fold, seed); collect() concatenates in path order

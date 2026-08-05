@@ -22,7 +22,7 @@ Two modes, chosen automatically by what the runs carry:
     Optional --zero-shot-path pools an existing zero-shot run's folds into a
     `zero_shot_acc`/`zero_shot_std` pair (no seed axis -> std is NaN, n_seeds 0).
 
-  FALLBACK mode -- raw.csv has no fold/seed columns (e.g. plain LR-search test
+  FALLBACK mode -- raw.csv has no seed column (e.g. plain LR-search test
   runs): no aggregation is possible, so emit one column per run instead:
       <prefix>.csv       wide: rows=target_lang, one col per run folder
                          (leading timestamp stripped, e.g. 20260522_170730_xpe -> xpe)
@@ -54,12 +54,20 @@ import pandas as pd
 from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
 TIMESTAMP_RE = re.compile(r'^\d{8}_\d{6}_')
-SEEDFOLD_RE = re.compile(r'_f\d+_s\d+$')
+# Belebele runs are `<method>_f<fold>_s<seed>`; SIB-200 has no fold axis and is
+# `<method>_s<seed>`. Both must reduce to the bare method tag.
+SEEDFOLD_RE = re.compile(r'(_f\d+)?_s\d+$')
 
 # Which LANG_GROUPS entry is the pretraining-"seen" set for each backbone (the
 # `llm` column in raw.csv). LANG_GROUPS (scripts/run_xlt.py) is the source of
 # truth for the actual language lists.
-LLM_SEEN_GROUP = {'bloom': 'bloom_seen', 'aya': 'aya_seen'}
+LLM_SEEN_GROUP = {
+    'bloom': 'bloom_seen',
+    'aya': 'aya_seen',
+    # SIB-200 encoders; these runs carry no fold axis (see has_seed_axis).
+    'mdeberta': 'mdeberta_seen',
+    'mgte': 'mgte_seen',
+}
 
 
 def parse_method(run_name: str) -> str:
@@ -85,17 +93,33 @@ def collect(path: Path) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def has_fold_seed(df: pd.DataFrame) -> bool:
-    """True iff the runs carry usable fold AND seed columns (aggregate mode)."""
-    if not {'fold', 'seed'}.issubset(df.columns):
+def has_seed_axis(df: pd.DataFrame) -> bool:
+    """True iff the runs carry a usable `seed` column (aggregate mode).
+
+    A `fold` column is OPTIONAL: Belebele runs are folded (pool folds, then
+    average over seeds) while SIB-200 runs are not (one row per seed already),
+    and both belong in aggregate mode. Only a missing seed axis -- e.g. a plain
+    LR-search test sweep -- falls back to one-column-per-run.
+
+    Note this also promotes any older seed-but-no-fold run dir from FALLBACK to
+    AGGREGATE mode, which is the correct treatment but is a behaviour change.
+    """
+    if 'seed' not in df.columns:
         return False
-    return bool(df['fold'].notna().any() and df['seed'].notna().any())
+    return bool(df['seed'].notna().any())
 
 
 # --- aggregate mode ---------------------------------------------------------
 
 def _weighted(x: pd.DataFrame) -> float:
     return (x['accuracy'] * x['n']).sum() / x['n'].sum()
+
+
+def _n_folds(x: pd.DataFrame) -> int:
+    """Distinct folds in a group; 1 for a fold-less benchmark (SIB-200)."""
+    if 'fold' not in x.columns or not x['fold'].notna().any():
+        return 1
+    return int(x['fold'].nunique())
 
 
 def pool_folds(df: pd.DataFrame) -> pd.DataFrame:
@@ -106,7 +130,7 @@ def pool_folds(df: pd.DataFrame) -> pd.DataFrame:
         rows.append({
             'method': method, 'seed': seed, 'target_lang': lang,
             'acc': _weighted(x), 'n_items': int(x['n'].sum()),
-            'n_folds': x['fold'].nunique(),
+            'n_folds': _n_folds(x),
         })
     return pd.DataFrame(rows)
 
@@ -312,7 +336,7 @@ def main() -> None:
     prefix = args.out_prefix or (args.path / 'test_unified')
     seeds = [int(s) for s in args.seeds.split(',')] if args.seeds else None
 
-    if has_fold_seed(collect(args.path)):
+    if has_seed_axis(collect(args.path)):
         write_aggregate(args.path, prefix, args.zero_shot_path, seeds)
     else:
         if args.zero_shot_path is not None:

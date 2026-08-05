@@ -5,9 +5,10 @@ import pandas as pd
 import pytest
 
 from scripts.evals.unify_xlt_test_res import (
-    parse_method, has_fold_seed, pool_folds, seed_mean_std, pool_zero_shot,
+    parse_method, has_seed_axis, pool_folds, seed_mean_std, pool_zero_shot,
     column_name, unify_runs, to_wide, restrict_to_langs,
     backbone, seen_langs_for, add_seen, low_perf_langs_for, restrict_to_seeds,
+    LLM_SEEN_GROUP,
 )
 from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
@@ -28,19 +29,25 @@ def test_parse_method_zero_shot_runname():
 
 # --- mode detection ---------------------------------------------------------
 
-def test_has_fold_seed_true():
+def test_has_seed_axis_true():
     df = pd.DataFrame([{'fold': 0, 'seed': 10, 'target_lang': 'x', 'accuracy': 0.5, 'n': 300}])
-    assert has_fold_seed(df) is True
+    assert has_seed_axis(df) is True
 
 
-def test_has_fold_seed_missing_columns():
+def test_has_seed_axis_missing_columns():
     df = pd.DataFrame([{'target_lang': 'x', 'accuracy': 0.5}])
-    assert has_fold_seed(df) is False
+    assert has_seed_axis(df) is False
 
 
-def test_has_fold_seed_all_null():
+def test_has_seed_axis_all_null():
     df = pd.DataFrame([{'fold': None, 'seed': None, 'target_lang': 'x', 'accuracy': 0.5}])
-    assert has_fold_seed(df) is False
+    assert has_seed_axis(df) is False
+
+
+def test_has_seed_axis_ignores_a_null_fold_column():
+    # fold is optional; only the seed axis decides aggregate vs fallback
+    df = pd.DataFrame([{'fold': None, 'seed': 11, 'target_lang': 'x', 'accuracy': 0.5}])
+    assert has_seed_axis(df) is True
 
 
 # --- aggregate mode ---------------------------------------------------------
@@ -259,3 +266,79 @@ def test_unify_runs_one_column_per_run(tmp_path):
     assert list(table.columns) == ['xpe_lr5e5', 'spt_lr5e5']
     assert math.isclose(table.loc['deu_Latn', 'xpe_lr5e5'], 0.30)
     assert math.isclose(table.loc['fra_Latn', 'spt_lr5e5'], 0.41)
+
+
+# --- fold-less runs (SIB-200) -----------------------------------------------
+# Belebele runs are folded; SIB-200 ships official splits and has no fold axis.
+# Both must land in AGGREGATE mode -- only a missing SEED axis is fallback.
+
+def _foldless(**over):
+    row = {'target_lang': 'kat_Geor', 'seed': 11, 'accuracy': 0.70, 'n': 204,
+           'method': 'xpe', 'llm': 'mdeberta'}
+    row.update(over)
+    return row
+
+
+def test_has_seed_axis_true_without_fold_column():
+    assert has_seed_axis(pd.DataFrame([_foldless()])) is True
+
+
+def test_has_seed_axis_false_without_seed_column():
+    df = pd.DataFrame([_foldless()]).drop(columns=['seed'])
+    assert has_seed_axis(df) is False
+
+
+def test_has_seed_axis_false_when_seed_all_nan():
+    assert has_seed_axis(pd.DataFrame([_foldless(seed=float('nan'))])) is False
+
+
+def test_has_seed_axis_still_true_for_folded_runs():
+    assert has_seed_axis(pd.DataFrame([_foldless(fold=0)])) is True
+
+
+def test_parse_method_strips_a_seed_only_suffix():
+    assert parse_method('20260805_101112_xpe_s11') == 'xpe'
+    assert parse_method('20260805_101112_d70_s15') == 'd70'
+    # folded Belebele run names must keep working
+    assert parse_method('20260720_090000_xpe_f0_s10') == 'xpe'
+
+
+def test_pool_folds_without_fold_column_reports_one_fold():
+    df = pd.DataFrame([_foldless(), _foldless(target_lang='swh_Latn', accuracy=0.60)])
+    pooled = pool_folds(df)
+    assert len(pooled) == 2
+    assert set(pooled['n_folds']) == {1}
+    assert pooled.set_index('target_lang').loc['kat_Geor', 'acc'] == pytest.approx(0.70)
+    assert pooled.set_index('target_lang').loc['kat_Geor', 'n_items'] == 204
+
+
+def test_seed_mean_std_over_foldless_rows():
+    df = pd.DataFrame([_foldless(seed=11, accuracy=0.70), _foldless(seed=12, accuracy=0.74)])
+    row = seed_mean_std(pool_folds(df)).set_index('target_lang').loc['kat_Geor']
+    assert row['mean_acc'] == pytest.approx(0.72)
+    assert row['n_seeds'] == 2
+    assert row['seed_std'] == pytest.approx(0.02 * math.sqrt(2))
+
+
+def test_pool_zero_shot_without_fold_column():
+    df = pd.DataFrame([_foldless(method='zero_shot')])
+    out = pool_zero_shot(df)
+    assert len(out) == 1
+    assert out.iloc[0]['mean_acc'] == pytest.approx(0.70)
+    assert out.iloc[0]['n_items'] == 204
+
+
+@pytest.mark.parametrize('llm,group,size', [
+    ('mdeberta', 'mdeberta_seen', 92),
+    ('mgte', 'mgte_seen', 76),
+])
+def test_seen_group_mapping_covers_encoder_backbones(llm, group, size):
+    assert LLM_SEEN_GROUP[llm] == group
+    assert len(seen_langs_for(llm)) == size
+
+
+@pytest.mark.parametrize('llm', ['mdeberta', 'mgte'])
+def test_encoders_have_no_low_perf_group(llm):
+    # not measured for these backbones -- must degrade to "no low-perf row",
+    # never raise
+    assert low_perf_langs_for(llm) == set()
