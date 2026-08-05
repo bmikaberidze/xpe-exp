@@ -29,16 +29,46 @@ on prior summaries in this conversation; quote the section/table you used.
 
 ## Run environment
 
-Run repo scripts and tests with the **default `python` / `python3`** directly — no venv, no `source activate`:
+**NEVER run python on the login node. Every step goes through `sbatch` + an array,
+and the container that `run.sh` starts carries the correct environment** — it is the
+only interpreter whose output counts. This covers dataset downloads, tokenization,
+probes, training, evaluation, unify/aggregate and pytest.
 
 ```
-python -m scripts.run_xlt_meta ...
-python -m pytest tests/ -q
+sbatch --array=0 --mem=30G --wait runtime/clusters/pegasus/shell/run.sh --site-packages --no-gpu \
+  "python -m pytest tests/ -q"
+
+sbatch --array=0-59%10 --mem=30G runtime/clusters/pegasus/shell/run.sh --site-packages \
+  "python -m scripts.run_xlt_meta --meta-config ... --test-config ... --source-group ..."
 ```
 
-- If `import micm_nlp` fails (`ModuleNotFoundError`), install it editable from the sibling checkout:
-  `python -m pip install -e /fscratch/bmikaberidze/micm-nlp`
-- On the SLURM cluster, jobs are launched via `runtime/clusters/pegasus/shell/run.sh ... "python -m scripts...."` (the wrapper sets up the env), but we are already on SLURM cluster.
+### The rules
+
+- **ALWAYS an array — even for one job** (`--array=0`). Never a bare `sbatch`.
+- **NEVER loop `sbatch` over runs.** A shell loop that submits one `sbatch` per run
+  puts one row per run in `squeue`, floods the cluster and has **no throttle**. One
+  array submission is one row and is throttleable. If you find yourself writing
+  `for X in ...; do sbatch ...; done` over *runs*, the matrix belongs in a
+  metaconfig instead. (Looping over a handful of `--source-group` values is fine —
+  that is a few *array* submissions, and they must still be sent one at a time,
+  each confirmed landed before the next; see the dispatch incidents below.)
+- **ALWAYS throttle with `%10`** — `--array=0-59%10` runs at most 10 tasks at once.
+  Unthrottled arrays starve other users and make black-hole nodes harder to spot.
+- `--array`, `--mem`, `--partition` go on the **`sbatch` CLI**, never after `run.sh`:
+  the wrapper consumes only `--site-packages` and `--no-gpu` as `$1`, and **anything
+  else becomes the command it runs** (so a stray `--mem 30G` silently drops your
+  python command). Add `--no-gpu` for CPU-only steps.
+- `--mem` stays **≥30G** always — the ~25 GB container image unpacks into the job cgroup.
+- Read output from `runtime/clusters/pegasus/shell/logs/sbatch/{jobid}_{task}.{out,err}`,
+  not stdout. `--wait` blocks until the job finishes.
+- Multi-line inspection snippets: write a `.py` file first, then run
+  `"python <path>.py"` through the wrapper — nesting quotes inside `run.sh "…"` is fragile.
+- If `import micm_nlp` fails (`ModuleNotFoundError`), install it editable from the
+  sibling checkout: `python -m pip install -e /fscratch/bmikaberidze/micm-nlp`.
+- Tokenization hazard: `datasets` ≥4 writes a `List` feature type that `datasets` <4
+  cannot read (`Feature type 'List' not found`). Everything runs in one container now,
+  so this only bites if a dataset was tokenized outside it — round-trip one language
+  before tokenizing a whole benchmark.
 
 ## GPU partitions / VRAM (SLURM)
 
@@ -58,6 +88,9 @@ VRAM groups (see the reference table at the bottom of `run.sh`):
   `--partition=B200,H200,H200-PCI,H100-PCI,H100-Trails`. Without it, jobs land on
   ≤80 GB nodes and OOM.
 - **Bloomz-7b1 fits in 80 GB** → default partition is fine, no override needed.
+- **Any `run.sh` job needs ≥30 GB RAM** (the ~25 GB container image unpacks into
+  node tmpfs and is charged to the job's cgroup) — never lower `--mem` below 30G,
+  even for tiny CPU-only jobs like the unify scripts.
 
 ## Core package: micm_nlp
 
@@ -95,6 +128,7 @@ scripts/
   run_xlt.py                     # core: tune_phase, load_concat_dataset, discover_target_langs
   run_xlt_meta.py                # fan a metaconfig matrix over a SLURM --array; --fold N, --seed
   evals/                         # plot/unify; unify_xlt_test_res.py (raw.csv: pool folds + seed std, else per-run fallback), unify_xlt_valid_res.py (valid_res.csv: per-fold mean, seed std)
+                                 # aggregate_xlt_res.py: the per-lang test_unified.csv of all source groups -> ONE xlt_runs/{llm}/aggr_res.csv (target-group x source-group cells)
                                  # NOTE: quant.py / quant_boot_diff_sci.py are for REPRESENTATION evaluation (hidden-state analysis), NOT accuracy/eval-result significance — do not use them to test method-vs-method accuracy gaps.
   datasets/                      # reframe_bebe_to_ftp -> split_bebe_folds -> preprocess_dir
 runtime/clusters/pegasus/shell/
