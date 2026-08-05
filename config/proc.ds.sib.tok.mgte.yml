@@ -1,0 +1,77 @@
+mode: preprocess # preprocess | train | finetune | evaluate | test
+
+task:
+    id: null
+    category: text_classification
+    name: topic # Topic Detection
+
+tokenizer:
+    source: huggingface # local | huggingface
+    # mGTE reuses XLM-R's vocabulary and its tokenizer_config.json declares
+    # `tokenizer_class: XLMRobertaTokenizer` with no `auto_map`, so unlike the
+    # MODEL (a custom `NewModel`) the tokenizer needs no trust_remote_code.
+    name: Alibaba-NLP/gte-multilingual-mlm-base
+    type: null # null | wordpiece | sentpiece
+    algorithm: null
+    adapt_to_lm: false
+
+ds:
+    descriptive_name: null
+    category: benchmarks # benchmarks | corpora | collections | raw
+    # `eng_Latn` is the literal default; preprocess_dir strips the lang segment
+    # and fans out over all 205. SIB-200 has no folds — the official
+    # train/validation/test splits (701/99/204) are used as-is.
+    dirs: topic/sib200/eng_Latn
+    name: null
+    type: huggingface_saved # text | csv | huggingface_saved | huggingface
+    comes_with_splits:
+        train: true
+        test: true
+        validation: true
+    input:
+        key: inputs
+        standardize_key: false
+    label:
+        key: labels
+        standardize_key: false
+    # SIB-200 carries `index_id` (an item index), NOT task_ids. run_xlt injects
+    # its own task_ids column (the source/target LANGUAGE index) at mix time.
+    task_id: null
+    preproc_rules:
+        subset:
+            run: false
+            use: 0.1 # Use only (X*100)% of the dataset
+            save_as: false # false | txt
+        tokenize:
+            run: true
+            pre_rules:
+                label_name_to_id: false  # download_sib already wrote integer ids
+                split_sentences: false # false | kast | nltkst | spacyst
+                append_eos_token: false
+                keep_target_texts_for_save: true
+                text_to_text_rules: false
+            rules:
+                # 164 is the legacy XPE SIB-200 length. SIB sentences are short,
+                # so this truncates essentially nothing while keeping batch
+                # geometry identical to the published runs.
+                max_length: 164
+                padding: false # max_length | true (longest) | false (do_not_pad)
+                truncation: true
+                add_special_tokens: true
+                return_special_tokens_mask: false
+                return_token_type_ids: false
+                return_length: true
+                return_tensors: np
+                is_split_into_words: false
+            post_rules:
+                end_truncation_with_eos: false
+                concat_samples: false
+                # Legacy SIB-200 used false. `sort_by_len: true` physically
+                # reorders rows on disk, which changes batch composition per
+                # seed — keep false for fidelity with the published runs.
+                sort_by_len: false
+            save_as: huggingface # false | csv | huggingface
+
+env: # Environment variables are stored in os.environ during load config
+    PYTORCH_CUDA_ALLOC_CONF: null # max_split_size_mb:128
+    TOKENIZERS_PARALLELISM: 'true' # 'true' | 'false'
