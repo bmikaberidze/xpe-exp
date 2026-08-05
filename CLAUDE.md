@@ -37,18 +37,22 @@ both base-size, both on **SIB-200 topic classification**, zero-shot XLT only.
 - **No folds.** SIB-200 ships official `train`/`validation`/`test` splits of
   **701/99/204** per language. **Never pass `--fold`** — `apply_fold` raises when a
   fold is given and `ds.dirs` has no `fold<N>` segment.
-- **Language metadata lives in `src/sib200_meta.py`**, not a CSV (`artefacts/` is
-  gitignored, `scripts/` holds code). 205 rows with `xlmr` (the paper's Seen-92) and
-  `low_perf` (the paper's 46, from the appendix Group==2 tags). `LANG_GROUPS` and
-  `LOW_PERF_LANG_GROUPS` in `scripts/run_xlt.py` are pinned to it by
-  `tests/test_lang_groups.py`.
+- **`LANG_GROUPS` in `scripts/run_xlt.py` is the single source of truth for source
+  languages** — read groups from there, never from `src/sib200_meta.py`, so a group and
+  the runs it produced cannot drift. `src/sib200_meta.py` holds the *metadata* behind
+  those lists (205 rows: Joshi tier, family, region, `xlmr`), not a CSV, because
+  `artefacts/` is gitignored and `scripts/` holds code. `tests/test_lang_groups.py`
+  pins the literals against it.
 - **`mdeberta_seen` == the paper's Seen-92** (mDeBERTa trains on CC100 like XLM-R), so
   mDeBERTa is the *bridge row* to the published Table 1: same partition, new code.
   That equality is an assumption, not a documented identical language list — see the
   docstring in `src/sib200_meta.py` before leaning on it in the write-up.
-- **Low-perf is benchmark-derived**, not backbone-derived (XLM-R-large full-FT < 60% in
-  the original SIB-200 benchmark), so both encoders share one list. `mgte` drops
-  `yor_Latn`, which it saw in pretraining (0.04M tokens).
+- **No low-perf group for the encoders.** The paper's Low-Performing set is defined by
+  full fine-tuning of **XLM-R-large** in the original SIB-200 benchmark (< 60%, sec.
+  4.2), so it characterises XLM-R — and the equivalent has not been measured for
+  mDeBERTa or mGTE. Their tables carry no low-perf row until it is.
+  `low_perf_langs()` in `src/sib200_meta.py` keeps the XLM-R list as provenance to
+  compare a future per-backbone measurement against.
 - **The legacy repo is the behavioral spec, and its YAML is NOT the whole recipe.**
   `/fscratch/bmikaberidze/XPE` (`nlpka`) produced the published numbers, but
   `nlpka/configs/scripts/xpe_utils.py`'s SLURM-task table **overrides the YAML at

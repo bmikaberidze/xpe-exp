@@ -117,9 +117,12 @@ LANG_GROUPS = {
     # --- SIB-200 encoder backbones -------------------------------------------
     # The two groups below are the SIB-200 analogues of the paper's "Seen" set
     # (xpe.pdf sec. 4.2: "Seen: The 92 languages that were included in the XLM-R
-    # pretraining corpus"). Both are materialised from src/sib200_meta.py
-    # (`seen_langs('mdeberta')` / `seen_langs('mgte')`); tests/test_lang_groups.py
-    # asserts the lists here still match that table.
+    # pretraining corpus"). THIS dict is the single source of truth for every
+    # group -- read source langs from here, never from src/sib200_meta.py, so a
+    # group and the runs it produced can't drift. That module holds the
+    # per-language metadata behind these lists (Joshi tier, family, region,
+    # which backbone saw what), and tests/test_lang_groups.py pins these literals
+    # against it.
 
     # mDeBERTa-v3 (microsoft/mdeberta-v3-base) is pretrained on CC100 like XLM-R,
     # so this group is taken to BE the published paper's Seen-92 -- which makes
@@ -208,40 +211,13 @@ LOW_PERF_LANG_GROUPS = {
         'arb_Latn', 'urd_Latn', 'sin_Latn', 'npi_Latn', 'ben_Latn',
     ],
 
-    # --- SIB-200 encoder backbones -------------------------------------------
-    # Unlike the two Belebele lists above, the SIB-200 low-performing group is
-    # BENCHMARK-derived, not backbone-derived: xpe.pdf sec. 4.2 defines it as the
-    # SIB-200 languages scoring below 60% under full fine-tuning of XLM-R-large
-    # "reported in the original benchmark". So both encoders share one list --
-    # which is also what keeps these rows comparable to the published Table 1.
-    # The 46 codes come from the paper's appendix per-language tables (pp. 12-14,
-    # Group == 2); src/sib200_meta.py carries the same set as its `low_perf`
-    # column and tests/test_lang_groups.py asserts the two stay in sync.
-    'mdeberta': [
-        'ace_Arab', 'aka_Latn', 'arb_Latn', 'ayr_Latn', 'bam_Latn', 'bem_Latn',
-        'bjn_Arab', 'bod_Tibt', 'cjk_Latn', 'ckb_Arab', 'dyu_Latn', 'dzo_Tibt',
-        'ewe_Latn', 'fon_Latn', 'ibo_Latn', 'kab_Latn', 'kam_Latn', 'kbp_Latn',
-        'kik_Latn', 'kin_Latn', 'kmb_Latn', 'knc_Arab', 'lua_Latn', 'lug_Latn',
-        'min_Arab', 'mni_Beng', 'mos_Latn', 'mri_Latn', 'nqo_Nkoo', 'nso_Latn',
-        'nus_Latn', 'run_Latn', 'sat_Olck', 'shn_Mymr', 'smo_Latn', 'sna_Latn',
-        'sot_Latn', 'ssw_Latn', 'taq_Latn', 'taq_Tfng', 'tgk_Cyrl', 'tsn_Latn',
-        'tso_Latn', 'tzm_Tfng', 'umb_Latn', 'yor_Latn',
-    ],
-
-    # Same list minus yor_Latn, which mGTE DID see in pretraining (0.04M tokens
-    # -- nominally seen; see MGTE_TOKENS_M). Low-perf must stay a strict subset
-    # of the backbone's unseen set, and unify_xlt_test_res.add_seen() raises on
-    # a lang that is both seen and low-perf. 45 codes.
-    'mgte': [
-        'ace_Arab', 'aka_Latn', 'arb_Latn', 'ayr_Latn', 'bam_Latn', 'bem_Latn',
-        'bjn_Arab', 'bod_Tibt', 'cjk_Latn', 'ckb_Arab', 'dyu_Latn', 'dzo_Tibt',
-        'ewe_Latn', 'fon_Latn', 'ibo_Latn', 'kab_Latn', 'kam_Latn', 'kbp_Latn',
-        'kik_Latn', 'kin_Latn', 'kmb_Latn', 'knc_Arab', 'lua_Latn', 'lug_Latn',
-        'min_Arab', 'mni_Beng', 'mos_Latn', 'mri_Latn', 'nqo_Nkoo', 'nso_Latn',
-        'nus_Latn', 'run_Latn', 'sat_Olck', 'shn_Mymr', 'smo_Latn', 'sna_Latn',
-        'sot_Latn', 'ssw_Latn', 'taq_Latn', 'taq_Tfng', 'tgk_Cyrl', 'tsn_Latn',
-        'tso_Latn', 'tzm_Tfng', 'umb_Latn',
-    ],
+    # NOTE deliberately no 'mdeberta' / 'mgte' entry. The paper's SIB-200
+    # low-performing group is defined by full fine-tuning of XLM-R-LARGE in the
+    # original benchmark (xpe.pdf sec. 4.2: accuracy < 60%), so it characterises
+    # XLM-R -- and we have not measured the equivalent for either encoder. Until
+    # we do, their tables carry no low-perf row (unify/aggregate degrade
+    # gracefully: low_perf_langs_for() returns an empty set for an unknown llm).
+    # src/sib200_meta.py keeps the XLM-R list as provenance to compare against.
 }
 
 

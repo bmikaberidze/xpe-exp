@@ -79,9 +79,8 @@ def test_src_tag_zero_when_empty():
 
 # --- SIB-200 encoder groups (pinned to src/sib200_meta.py) -------------------
 
-from scripts.run_xlt import LOW_PERF_LANG_GROUPS
 from src.sib200_meta import (
-    LABEL_NAMES, MGTE_TOKENS_M, SIB200_LANGS, low_perf_langs, seen_langs, sib200_codes,
+    LABEL_NAMES, MGTE_TOKENS_M, SIB200_LANGS, low_perf_langs, sib200_codes, xlmr_seen_langs,
 )
 
 
@@ -101,28 +100,31 @@ def test_label_names_are_canonical_order():
     ]
 
 
-@pytest.mark.parametrize('group,backbone,size', [
-    ('mdeberta_seen', 'mdeberta', 92),
-    ('mgte_seen', 'mgte', 76),
-])
-def test_encoder_seen_groups_match_table(group, backbone, size):
+# LANG_GROUPS is the single runtime source of truth for source languages; these
+# tests only pin its literals against the metadata table so the two can't drift.
+@pytest.mark.parametrize('group,size', [('mdeberta_seen', 92), ('mgte_seen', 76)])
+def test_encoder_seen_groups_are_well_formed(group, size):
     langs = LANG_GROUPS[group]
     assert len(langs) == size
     assert len(set(langs)) == size  # no duplicates
-    assert set(langs) == set(seen_langs(backbone))
     assert resolve_langs(group, '') == langs
+
+
+def test_mgte_seen_matches_the_token_table():
+    # membership in MGTE_TOKENS_M is what defines mGTE's pretraining set
+    assert set(LANG_GROUPS['mgte_seen']) == set(MGTE_TOKENS_M)
 
 
 def test_mdeberta_seen_reproduces_paper_seen_92():
     # mDeBERTa-v3 trains on CC100 like XLM-R, so this group is taken to be the
     # paper's Seen-92 (xpe.pdf sec. 4.2) -- the bridge to Table 1. See the
     # assumption caveat in src/sib200_meta.py's docstring.
-    assert set(LANG_GROUPS['mdeberta_seen']) == set(seen_langs('xlmr'))
-    assert len(seen_langs('xlmr')) == 92
+    assert set(LANG_GROUPS['mdeberta_seen']) == set(xlmr_seen_langs())
+    assert len(xlmr_seen_langs()) == 92
 
 
 def test_mgte_seen_relation_to_xlmr_seen():
-    xlmr, mgte = set(seen_langs('xlmr')), set(LANG_GROUPS['mgte_seen'])
+    xlmr, mgte = set(xlmr_seen_langs()), set(LANG_GROUPS['mgte_seen'])
     # Seen by mGTE, not by XLM-R. NOTE tgl_Latn appears here only because the
     # legacy xlmr column marks it 0 while XLM-R's own tag list includes `tl`;
     # kept deliberately -- see src/sib200_meta.py.
@@ -133,39 +135,28 @@ def test_mgte_seen_relation_to_xlmr_seen():
     assert set(MGTE_TOKENS_M) == mgte  # token counts cover exactly the seen set
 
 
-def test_low_perf_group_partitions_the_benchmark():
+def test_low_perf_column_is_provenance_only():
+    # The paper's XLM-R-derived Low-Performing group. It is NOT wired into
+    # LOW_PERF_LANG_GROUPS for the encoders -- that list characterises
+    # XLM-R-large, and the equivalent has not been measured for mDeBERTa or mGTE.
     # 46 low-perf + 67 unseen-not-low-perf + 85 seen-wo-joshi5 = 198 = 205 - 7.
     lp = low_perf_langs()
     assert len(lp) == 46
-    # the paper requires Low-Performing to be a strict subset of Unseen
-    assert not (set(lp) & set(seen_langs('xlmr')))
-    seen_wo_j5 = set(seen_langs('xlmr')) - set(JOSHI5)
-    assert len(seen_wo_j5) == 85
-    unseen = set(sib200_codes()) - set(seen_langs('xlmr'))
-    assert len(unseen - set(lp)) == 67
+    assert not (set(lp) & set(xlmr_seen_langs()))  # strict subset of Unseen
+    assert len(set(xlmr_seen_langs()) - set(JOSHI5)) == 85
+    assert len((set(sib200_codes()) - set(xlmr_seen_langs())) - set(lp)) == 67
 
 
-def test_low_perf_lang_groups_match_the_table():
-    assert LOW_PERF_LANG_GROUPS['mdeberta'] == low_perf_langs('mdeberta') == low_perf_langs()
-    # yor_Latn is in mGTE's pretraining set (0.04M tokens), so it cannot also be
-    # an unseen low-performer there -- add_seen() raises on the overlap.
-    assert LOW_PERF_LANG_GROUPS['mgte'] == low_perf_langs('mgte')
-    assert set(LOW_PERF_LANG_GROUPS['mgte']) == set(low_perf_langs()) - {'yor_Latn'}
-
-
-@pytest.mark.parametrize('backbone', ['mdeberta', 'mgte'])
-def test_low_perf_is_disjoint_from_seen(backbone):
-    # unify_xlt_test_res.add_seen() raises if a lang is in both groups.
-    seen_group = LANG_GROUPS[f'{backbone}_seen']
-    assert not (set(LOW_PERF_LANG_GROUPS[backbone]) & set(seen_group))
+def test_no_low_perf_group_for_the_encoders():
+    from scripts.run_xlt import LOW_PERF_LANG_GROUPS
+    assert 'mdeberta' not in LOW_PERF_LANG_GROUPS
+    assert 'mgte' not in LOW_PERF_LANG_GROUPS
 
 
 def test_all_seen_groups_are_sib200_codes():
     codes = set(sib200_codes())
     for group in ('mdeberta_seen', 'mgte_seen', 'joshi5', 'enarzho'):
         assert set(LANG_GROUPS[group]) <= codes, group
-    for backbone in ('mdeberta', 'mgte'):
-        assert set(LOW_PERF_LANG_GROUPS[backbone]) <= codes, backbone
 
 
 def _cfg(arch='bloom'):

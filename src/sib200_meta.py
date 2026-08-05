@@ -20,7 +20,8 @@ xlmr      1 = in XLM-R's CC100 pretraining set. 92 of the 205 -> the paper's
           The two errors offset, which is why the count is 92. Do NOT "fix"
           them: the paper's Seen-92 and every published number depend on this
           exact column.
-low_perf  1 = the paper's Low-Performing group (46 languages), extracted from
+low_perf  PROVENANCE ONLY -- see low_perf_langs(). 1 = the paper's
+          Low-Performing group (46 languages), extracted from
           the appendix per-language tables (xpe.pdf pp. 12-14, Group == 2;
           legend on p. 14: "2 = Low-Performing and Unseen, 1 = Unseen,
           0 = Seen /wo Joshi5"). Defined in sec. 4.2 as SIB-200 languages
@@ -31,9 +32,15 @@ low_perf  1 = the paper's Low-Performing group (46 languages), extracted from
           Self-check: 46 low-perf + 67 unseen-not-low-perf + 85 seen-wo-joshi5
           = 198 = 205 - 7 joshi5, and 85 + 7 = the Seen-92.
 
-Backbone seen-sets are derived, not stored:
-  mdeberta  mDeBERTa-v3 trains on CC100 like XLM-R, so `seen_langs('mdeberta')`
-            returns the `xlmr` set. ASSUMPTION, not documented fact: the model
+Source-language GROUPS are not defined here. `LANG_GROUPS` in
+`scripts/run_xlt.py` is the single runtime source of truth for every group;
+`tests/test_lang_groups.py` pins its literals against this table so the two
+cannot drift. What this module is for: the per-language metadata behind those
+groups (Joshi tier, family, region, and which backbone saw what).
+
+Backbone seen-sets:
+  mdeberta  mDeBERTa-v3 trains on CC100 like XLM-R, so LANG_GROUPS['mdeberta_seen']
+            is the `xlmr` set. ASSUMPTION, not documented fact: the model
             card (https://huggingface.co/microsoft/mdeberta-v3-base) says
             "trained using the 2.5T CC100 data as XLM-R" and the DeBERTaV3
             paper says "using a similar setting as XLM-R"; neither states an
@@ -1532,35 +1539,31 @@ def sib200_codes():
     return [row['code'] for row in SIB200_LANGS]
 
 
-def seen_langs(backbone):
-    """Sorted SIB-200 codes seen during `backbone`'s pretraining.
+def xlmr_seen_langs():
+    """Sorted SIB-200 codes in XLM-R's CC100 pretraining set (the paper's Seen-92).
 
-    backbone: 'xlmr' | 'mdeberta' | 'mgte'
+    This is METADATA, not the runtime source of truth. Source-language groups are
+    read from `LANG_GROUPS` in `scripts/run_xlt.py` -- one place, so a group and
+    the runs it produced can never drift. `tests/test_lang_groups.py` pins those
+    literals against this table.
     """
-    if backbone in ('xlmr', 'mdeberta'):
-        return sorted(row['code'] for row in SIB200_LANGS if row['xlmr'] == 1)
-    if backbone == 'mgte':
-        return sorted(MGTE_TOKENS_M)
-    raise ValueError(f'unknown backbone: {backbone!r}')
+    return sorted(row['code'] for row in SIB200_LANGS if row['xlmr'] == 1)
 
 
-def low_perf_langs(backbone=None):
-    """The paper's 46 Low-Performing languages.
+def low_perf_langs():
+    """The paper's 46 Low-Performing languages -- PROVENANCE ONLY, not in use.
 
-    Benchmark-derived, so the base list is backbone-independent. Pass a backbone
-    to get the list usable as that backbone's TARGET low-perf group: low-perf is
-    a strict subset of Unseen, so anything the backbone actually saw during
-    pretraining is dropped. That only bites mGTE, which saw yor_Latn (0.04M
-    tokens -- nominally seen; see MGTE_TOKENS_M). Keeping the overlap would make
-    unify_xlt_test_res.add_seen() raise.
+    xpe.pdf sec. 4.2 defines these by full fine-tuning of *XLM-R-large* in the
+    original SIB-200 benchmark (accuracy < 60%), i.e. the list characterises
+    XLM-R, and we have not measured the equivalent for mDeBERTa or mGTE. So there
+    is deliberately no `LOW_PERF_LANG_GROUPS` entry for either encoder and no
+    low-perf row in their tables. Kept here because it was free to extract (the
+    appendix per-language tables tag every language) and is what a per-backbone
+    measurement would later be compared against.
     """
-    base = sorted(row['code'] for row in SIB200_LANGS if row['low_perf'] == 1)
-    if backbone is None:
-        return base
-    seen = set(seen_langs(backbone))
-    return [code for code in base if code not in seen]
+    return sorted(row['code'] for row in SIB200_LANGS if row['low_perf'] == 1)
 
 
 # Backwards-compatible exports (scripts/evals/plot.py imports the second one).
 sib200_meta = pd.DataFrame(SIB200_LANGS)
-xlmr_seen_sib200_ds_names = seen_langs('xlmr')
+xlmr_seen_sib200_ds_names = xlmr_seen_langs()
