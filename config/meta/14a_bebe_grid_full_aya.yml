@@ -7,9 +7,12 @@
 #   enarzho (3) | joshi5 (7) | aya_seen (24)                                     [3]
 # => full aya spectrum = 60 x 3 = 180 runs. (bloomz twin = 14b; grand total 360.)
 #
-# LRs = LR-search/13a winners (kept; 13a confirmed they transfer across groups):
-#   XPE  lr=5e-4 (tune.xpe...), SPT lr=1.0 (tune.spt..., WD=0),
-#   DUAL base lr=1.0 (SPT part) + xpe-group lr=5e-4, encoder_ratio 0.3/0.7 via override.
+# LRs: XPE lr=5e-4 (tune.xpe...); SPT-part lr=0.5 (tune.spt / tune.dual base, WD=0)
+#   -- STABILITY re-pick, was 1.0 (13a val-acc winner) which diverged 2-3/5 seeds in the
+#   first 14a pass (spt joshi5+aya_seen, d30 aya_seen). LR=1.0 spt/d30/d70 runs archived
+#   as {group}/14a_lr10_sptdual (stability-analysis dataset). XPE runs (idx 0-14) stand.
+#   DUAL xpe-group lr=5e-4, encoder_ratio 0.3/0.7 via override.
+# Re-dispatch after LR fix: indices 15-59 only (spt 15-29, d30 30-44, d70 45-59).
 # max_steps=2400 (trimmed from 4000; 13a/13b showed val-acc peaks <2k for ALL groups).
 # Select on VALIDATION accuracy (metric_for_best_model=accuracy); test runs per fold.
 #
@@ -102,3 +105,74 @@ matrix:
   - {tune_method: d70, run_name: d70_f2_s12, fold: 2, seed: 12, overrides: {peft.encoder_ratio: 0.7}}
   - {tune_method: d70, run_name: d70_f2_s13, fold: 2, seed: 13, overrides: {peft.encoder_ratio: 0.7}}
   - {tune_method: d70, run_name: d70_f2_s14, fold: 2, seed: 14, overrides: {peft.encoder_ratio: 0.7}}
+
+  # ===== SEED EXTENSION (2026-07-20): seeds 15..19, indices 60-119 =====
+  # Pre-registered n=10 replication; dispatch --array=60-119. Same LRs/configs.
+
+  # ===== xpe x fold{0,1,2} x seed{15..19}  (idx 60-74) =====
+  - {tune_method: xpe, run_name: xpe_f0_s15, fold: 0, seed: 15}
+  - {tune_method: xpe, run_name: xpe_f0_s16, fold: 0, seed: 16}
+  - {tune_method: xpe, run_name: xpe_f0_s17, fold: 0, seed: 17}
+  - {tune_method: xpe, run_name: xpe_f0_s18, fold: 0, seed: 18}
+  - {tune_method: xpe, run_name: xpe_f0_s19, fold: 0, seed: 19}
+  - {tune_method: xpe, run_name: xpe_f1_s15, fold: 1, seed: 15}
+  - {tune_method: xpe, run_name: xpe_f1_s16, fold: 1, seed: 16}
+  - {tune_method: xpe, run_name: xpe_f1_s17, fold: 1, seed: 17}
+  - {tune_method: xpe, run_name: xpe_f1_s18, fold: 1, seed: 18}
+  - {tune_method: xpe, run_name: xpe_f1_s19, fold: 1, seed: 19}
+  - {tune_method: xpe, run_name: xpe_f2_s15, fold: 2, seed: 15}
+  - {tune_method: xpe, run_name: xpe_f2_s16, fold: 2, seed: 16}
+  - {tune_method: xpe, run_name: xpe_f2_s17, fold: 2, seed: 17}
+  - {tune_method: xpe, run_name: xpe_f2_s18, fold: 2, seed: 18}
+  - {tune_method: xpe, run_name: xpe_f2_s19, fold: 2, seed: 19}
+
+  # ===== spt x fold{0,1,2} x seed{15..19}  (idx 75-89) =====
+  - {tune_method: spt, run_name: spt_f0_s15, fold: 0, seed: 15}
+  - {tune_method: spt, run_name: spt_f0_s16, fold: 0, seed: 16}
+  - {tune_method: spt, run_name: spt_f0_s17, fold: 0, seed: 17}
+  - {tune_method: spt, run_name: spt_f0_s18, fold: 0, seed: 18}
+  - {tune_method: spt, run_name: spt_f0_s19, fold: 0, seed: 19}
+  - {tune_method: spt, run_name: spt_f1_s15, fold: 1, seed: 15}
+  - {tune_method: spt, run_name: spt_f1_s16, fold: 1, seed: 16}
+  - {tune_method: spt, run_name: spt_f1_s17, fold: 1, seed: 17}
+  - {tune_method: spt, run_name: spt_f1_s18, fold: 1, seed: 18}
+  - {tune_method: spt, run_name: spt_f1_s19, fold: 1, seed: 19}
+  - {tune_method: spt, run_name: spt_f2_s15, fold: 2, seed: 15}
+  - {tune_method: spt, run_name: spt_f2_s16, fold: 2, seed: 16}
+  - {tune_method: spt, run_name: spt_f2_s17, fold: 2, seed: 17}
+  - {tune_method: spt, run_name: spt_f2_s18, fold: 2, seed: 18}
+  - {tune_method: spt, run_name: spt_f2_s19, fold: 2, seed: 19}
+
+  # ===== d30 x fold{0,1,2} x seed{15..19}  (idx 90-104) =====
+  - {tune_method: d30, run_name: d30_f0_s15, fold: 0, seed: 15, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f0_s16, fold: 0, seed: 16, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f0_s17, fold: 0, seed: 17, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f0_s18, fold: 0, seed: 18, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f0_s19, fold: 0, seed: 19, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s15, fold: 1, seed: 15, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s16, fold: 1, seed: 16, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s17, fold: 1, seed: 17, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s18, fold: 1, seed: 18, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f1_s19, fold: 1, seed: 19, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s15, fold: 2, seed: 15, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s16, fold: 2, seed: 16, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s17, fold: 2, seed: 17, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s18, fold: 2, seed: 18, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_f2_s19, fold: 2, seed: 19, overrides: {peft.encoder_ratio: 0.3}}
+
+  # ===== d70 x fold{0,1,2} x seed{15..19}  (idx 105-119) =====
+  - {tune_method: d70, run_name: d70_f0_s15, fold: 0, seed: 15, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f0_s16, fold: 0, seed: 16, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f0_s17, fold: 0, seed: 17, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f0_s18, fold: 0, seed: 18, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f0_s19, fold: 0, seed: 19, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s15, fold: 1, seed: 15, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s16, fold: 1, seed: 16, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s17, fold: 1, seed: 17, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s18, fold: 1, seed: 18, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f1_s19, fold: 1, seed: 19, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s15, fold: 2, seed: 15, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s16, fold: 2, seed: 16, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s17, fold: 2, seed: 17, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s18, fold: 2, seed: 18, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_f2_s19, fold: 2, seed: 19, overrides: {peft.encoder_ratio: 0.7}}

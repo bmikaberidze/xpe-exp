@@ -211,7 +211,8 @@ training_args:
             scale_parameter: false   # disable Adafactor's per-param LR rescaling
             relative_step: false     # disable Adafactor's internal LR schedule (external cosine drives LR)
             warmup_init: false       # only meaningful when relative_step=true
-        learning_rate: 1.0   # SPT-part final (matches tune.spt.aya); XPE-part lr=5e-4 in optimizer_grouped_parameters
+        learning_rate: 0.5   # SPT-part (matches tune.spt.aya STABILITY pick, was 1.0 — d30 aya_seen s12
+                             # partially diverged in 14a); XPE-part lr=5e-4 in optimizer_grouped_parameters
         lr_scheduler_type: cosine
         warmup_ratio: 0.1
         weight_decay: 0.0  # base = SPT part: no WD (XPE part WD in optimizer_grouped_parameters)

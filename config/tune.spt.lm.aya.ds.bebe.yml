@@ -201,7 +201,9 @@ training_args:
             scale_parameter: false   # disable Adafactor's per-param LR rescaling
             relative_step: false     # disable Adafactor's internal LR schedule (external cosine drives LR)
             warmup_init: false       # only meaningful when relative_step=true
-        learning_rate: 1.0   # final pick: 1.0>0.5 (wins 13a enarzho .892 + aya_seen .877; 2.0 collapses)
+        learning_rate: 0.5   # STABILITY pick (was 1.0): 1.0 wins val acc (13a) but diverges 2-3/5 seeds
+                             # in grid 14a (joshi5 s11/s14, aya_seen s10/s14); 0.5 close behind + stable.
+                             # LR=1.0 grid kept as the stability-analysis dataset (14a_lr10_sptdual).
         lr_scheduler_type: cosine
         warmup_ratio: 0.1
         weight_decay: 0
