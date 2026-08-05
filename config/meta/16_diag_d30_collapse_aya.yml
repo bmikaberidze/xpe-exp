@@ -1,0 +1,24 @@
+# DIAGNOSTIC ONLY -- rerun of the single collapsed 14a cell (joshi5, d30, fold0,
+# seed13, SPT-part LR 0.5) to classify the collapse: same seed => identical init
+# + data order; full_determinism=false => only kernel/hardware nondeterminism
+# differs. Converges => collapse is run-to-run trajectory noise (init is fine).
+# Collapses again => deterministic bad basin for this (init, data-order, config).
+# Result feeds the stability-analysis footnote; NEVER pooled into 14a aggregates
+# (separate run_group dir by this file's stem).
+#
+# Dispatch (single task):
+#   sbatch --array=0 --partition=B200,H200,H200-PCI,H100-PCI,H100-Trails \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "HF_HOME=/home/bmikaberidze/.cache/huggingface HF_HUB_OFFLINE=1 \
+#        TRANSFORMERS_OFFLINE=1 HF_METRICS_CACHE=/tmp/hf_metrics \
+#        HF_EVALUATE_CACHE=/tmp/hf_eval python -m scripts.run_xlt_meta \
+#          --meta-config ./config/meta/16_diag_d30_collapse_aya.yml \
+#          --test-config ./config/test.lm.aya.ds.bebe.fold.yml \
+#          --source-group joshi5"
+
+tune_configs:
+  d30: ./config/tune.dual.lm.aya.ds.bebe.yml
+
+matrix:
+  - {tune_method: d30, run_name: d30_f0_s13_diag, fold: 0, seed: 13,
+     overrides: {peft.encoder_ratio: 0.3}}
