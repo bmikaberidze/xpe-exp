@@ -1,0 +1,49 @@
+# SMOKE ONLY -- not an experiment. One short run per method to prove the SIB-200
+# encoder pipeline works end to end before any real dispatch. NEVER aggregated.
+#
+# max_steps is overridden to 4000 (the real configs use 24000) so a cell finishes
+# in minutes; at bs 32 on enarzho (3 langs x 701 rows) that is ~60 epochs.
+# Raised from an initial 300 (~4.5 epochs), which was too short to learn anything:
+# all three arms came out as CONSTANT PREDICTORS at exactly 0.250, and the same
+# arm+seed swung 0.387 -> 0.250 between two attempts (full_determinism=false, so
+# the early trajectory is still noise). Accuracies here still mean little beyond
+# "training moves" -- the real budget is 24000.
+#
+# Pass criteria, all four:
+#   1. the trainable-parameter list contains pooler.dense AND the prompt encoder
+#      (xpe_embedding/xpe_head for xpe+dual, embedding for spt). A missing pooler
+#      means modules_to_save did not take -- stop, do not proceed to 18a.
+#   2. no `nan` in the first 50 logged training losses (the bf16 check; fp16 is
+#      documented broken for mDeBERTa, fallback is fp32, never fp16).
+#   3. training reaches the step cap and the test phase writes per-lang rows.
+#   4. kat_Geor and swh_Latn clearly above the MAJORITY-CLASS baseline, which is
+#      0.250 for every SIB-200 language (51/204 are science/technology) -- NOT
+#      the 1/7 = 0.143 uniform-chance figure. A model sitting at exactly 0.250 is
+#      predicting one class and has learned nothing.
+#
+# !! mDeBERTa CANNOT RUN ON B200. DeBERTa-v2 compiles build_relative_position with
+# @torch.jit.script, and this container's NVRTC does not know Blackwell (sm_100):
+#   RuntimeError: nvrtc: error: invalid value for --gpu-architecture (-arch)
+# Verified 2026-08-05: serv-3310 (H100) trained fine, serv-3324 (B200) failed.
+# The default partition INCLUDES B200, so these runs MUST pin a non-B200
+# partition. Base-size encoders need no big-VRAM node anyway.
+#
+# Dispatch (one backbone at a time; swap the two config paths for mgte):
+#   sbatch --array=0-2 --mem=64G \
+#     --partition=H100,H100-PCI,H100-Trails,H200,H200-PCI,A100-80GB \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#     "python -m scripts.run_xlt_meta \
+#         --meta-config ./config/meta/17s_smoke_sib.yml \
+#         --test-config ./config/test.lm.mdeberta.ds.sib.yml \
+#         --source-group enarzho \
+#         --target-langs kat_Geor,swh_Latn,nqo_Nkoo"
+
+tune_configs:
+  xpe:  ./config/tune.xpe.lm.mdeberta.ds.sib.yml
+  spt:  ./config/tune.spt.lm.mdeberta.ds.sib.yml
+  dual: ./config/tune.dual.lm.mdeberta.ds.sib.yml
+
+matrix:
+  - {tune_method: xpe,  run_name: xpe_s11,  seed: 11, overrides: {training_args.args.max_steps: 4000}}
+  - {tune_method: spt,  run_name: spt_s11,  seed: 11, overrides: {training_args.args.max_steps: 4000}}
+  - {tune_method: dual, run_name: dual_s11, seed: 11, overrides: {training_args.args.max_steps: 4000, peft.encoder_ratio: 0.3}}

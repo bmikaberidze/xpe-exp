@@ -128,8 +128,19 @@ VRAM groups (see the reference table at the bottom of `run.sh`):
   `--partition=B200,H200,H200-PCI,H100-PCI,H100-Trails`. Without it, jobs land on
   ≤80 GB nodes and OOM.
 - **Bloomz-7b1 fits in 80 GB** → default partition is fine, no override needed.
-- **The SIB-200 encoders (`mdeberta`, `mgte`) are base-size** → default partition, no
-  override needed.
+- **The SIB-200 encoders (`mdeberta`, `mgte`) are base-size** → they need no big-VRAM
+  node, BUT see the B200 note below: they must still pin a partition.
+- **mDeBERTa CANNOT run on B200.** DeBERTa-v2 compiles `build_relative_position` with
+  `@torch.jit.script`, and this container's NVRTC does not know Blackwell (sm_100):
+  `RuntimeError: nvrtc: error: invalid value for --gpu-architecture (-arch)`.
+  Verified 2026-08-05: serv-3310 (H100) trained fine, serv-3324 (B200) failed. The
+  default partition INCLUDES B200, so these jobs MUST pin
+  `--partition=H100,H100-PCI,H100-Trails,H200,H200-PCI,A100-80GB`. Aya is unaffected
+  because it has no `jit.script` — which is why Aya *pins* B200 and mDeBERTa must
+  *avoid* it. Use the same pin for mGTE unless it is shown not to need it.
+- **`--mem=30G` is the container FLOOR, not a training request.** Use 64G for GPU
+  training jobs (the concatenated `mdeberta_seen` source set is 92 x 701 rows); 30G is
+  fine only for CPU-only steps like tokenization, unify and pytest.
 - **Any `run.sh` job needs ≥30 GB RAM** (the ~25 GB container image unpacks into
   node tmpfs and is charged to the job's cgroup) — never lower `--mem` below 30G,
   even for tiny CPU-only jobs like the unify scripts.
