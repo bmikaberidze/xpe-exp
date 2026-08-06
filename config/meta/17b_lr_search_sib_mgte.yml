@@ -1,48 +1,54 @@
-# LR search for SIB-200 on gte-multilingual-mlm-base (8 cells: method x prompt-lr).
-#   method    = xpe, spt      [2]  -- DUAL inherits the winner; sweeping it would
-#                                    triple the cost for no extra signal.
-#   prompt lr = 1e-3, 5e-3, 1e-2, 5e-2                                       [4]
-#   seed      = 11 (single seed; a coarse pick, not a replication study)
+# LR search for SIB-200 on gte-multilingual-mlm-base (36 cells: method x prompt-lr x seed).
+#   method    = xpe, spt                          [2]  DUAL inherits the winner.
+#   prompt lr = 1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2 [6]  ~half-decade steps,
+#                                                       centred on the legacy 5e-3
+#   seed      = 11, 12, 13                        [3]
+#
+# REVISED 2026-08-06 BEFORE ANY SURVIVING DISPATCH. The earlier 8-cell version of
+# this file was only ever used for two timing probes of one cell, both deleted in
+# 077917f, so no results referenced it. Per the "metaconfigs are immutable
+# contracts" rule in CLAUDE.md, once cells here produce results this file is
+# frozen -- additions only, never edits.
+#
+# WHY 3 SEEDS. A single seed cannot resolve this. Two runs of the identical cell
+# (xpe @ 5e-3, seed 11, mgte_seen) gave val 0.7667 and 0.8005 -- 3.4 points apart
+# from kernel nondeterminism alone (full_determinism: false), against method
+# effects of ~2.8 points in the published paper. A 1-seed pick would be noise.
+# 3 seeds is still coarse; treat the winner as "this region is fine", not as a
+# tuned optimum, and let the 10-seed grid do the statistical work.
 #
 # WHICH LR THIS SWEEPS. The published recipe has TWO learning rates
 # (xpe.pdf sec. 4.4 + nlpka xpe_utils.py:289-300):
 #   prompt embeddings          lr 5e-3, wd 0.0   <- custom_training_args
 #                                                   .optimizer_grouped_parameters[0]
 #   encoder MLP + classifier   lr 5e-5, wd 0.01  <- training_args.args
-# This sweeps the PROMPT-side one, because that is the parameter actually being
-# learned. Sweeping training_args.args.learning_rate instead would, for SPT,
-# vary only the classification head while the soft prompt stayed pinned -- a
-# meaningless sweep. The backbone side is held at the legacy 5e-5.
+# This sweeps the PROMPT-side one, the parameter actually being learned. Sweeping
+# training_args.args.learning_rate instead would, for SPT, vary only the
+# classification head while the soft prompt stayed pinned -- a meaningless sweep.
+# The backbone side is held at the legacy 5e-5.
 #
-# WHY SWEEP AT ALL. 5e-3 was tuned for XLM-R-LARGE (1024-dim, 560M). Both new
-# backbones are base-size (768-dim), so the prompt-side optimum need not carry
-# over. Note the 4000-step smoke already reached val 0.848 at the legacy value,
-# so this is a confirmation sweep, not a rescue.
+# WHY SWEEP AT ALL. 5e-3 was tuned for XLM-R-LARGE (1024-dim, 560M); both new
+# backbones are base-size (768-dim). The 4000-step smoke already reached val
+# 0.848 at the legacy value, so this is a confirmation sweep -- its job is to
+# catch a genuine failure (e.g. divergence at 5e-2) rather than to find an optimum.
 #
-# Selection is on VALIDATION ACCURACY (metric_for_best_model=accuracy), never
-# eval loss -- eval-loss explosion is cosmetic under prompt tuning (15a probe).
+# Selection is on VALIDATION ACCURACY, never eval loss (eval-loss explosion is
+# cosmetic under prompt tuning -- 15a probe). --skip-test: selection reads
+# valid_res.csv, so the per-language test phase would be wasted work.
 #
-# --skip-test: selection reads valid_res.csv, so the per-language test phase is
-# wasted work here. run_xlt raises if --skip-test is passed without a tune phase.
+# No folds: SIB-200 ships official 701/99/204 splits, so `fold` is empty in
+# valid_res.csv -- unify_xlt_valid_res handles that since 6ad388c.
 #
-# No folds: SIB-200 ships official train/validation/test splits (701/99/204), so
-# `fold` is empty in valid_res.csv -- unify_xlt_valid_res handles that since
-# commit 6ad388c.
-#
-# max_steps stays at the config's 24000, which is the legacy XLM-R budget. It
-# buys very different epoch counts per source group (2015 steps/epoch on
-# mgte_seen = 11.9 epochs; 153 on joshi5 = 157 epochs), and on mgte_seen
-# early stopping can never fire: the 50% gate lands at epoch 6 with ~6 epochs
-# left against patience 20. That asymmetry held identically in the published
-# XLM-R runs, so it is faithful, not a defect.
+# max_steps stays at the config's 24000 (the legacy XLM-R budget). On mgte_seen
+# that is 1665 steps/epoch = 14.4 epochs, and early stopping can never fire
+# (50% gate at epoch 7, ~7 left vs patience 20). Measured cost of one cell:
+# ~18 min. At %10 that is 4 waves, ~1h15 for all 36.
 #
 # Partition is pinned to the same non-B200 set as 17a. mDeBERTa provably cannot
-# run on B200 (NVRTC arch error from its jit.script'd build_relative_position);
-# whether mGTE's custom NewModel has the same problem is UNTESTED, so the safe
-# default is the same pin.
-#
-# Dispatch (throttled %10; one source group at a time, confirm each landed):
-#   sbatch --array=0-7%10 --mem=64G \
+# run on B200 (NVRTC arch error); whether mGTE's custom NewModel has the same
+# problem is UNTESTED, so the safe default is the same pin.
+# Dispatch:
+#   sbatch --array=0-35%10 --mem=64G \
 #     --partition=H100,H100-PCI,H100-Trails,H200,H200-PCI,A100-80GB \
 #     runtime/clusters/pegasus/shell/run.sh --site-packages \
 #       "python -m scripts.run_xlt_meta \
@@ -58,14 +64,42 @@ tune_configs:
 
 matrix:
 
-  # ===== xpe x prompt-lr  (idx 0-3) =====
-  - {tune_method: xpe, run_name: xpe_plr1e-3, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
-  - {tune_method: xpe, run_name: xpe_plr5e-3, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3}}
-  - {tune_method: xpe, run_name: xpe_plr1e-2, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-2}}
-  - {tune_method: xpe, run_name: xpe_plr5e-2, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2}}
+  # ===== xpe x prompt-lr x seed  (idx 0-17) =====
+  - {tune_method: xpe, run_name: xpe_plr1e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_plr1e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_plr1e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_plr2e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3}}
+  - {tune_method: xpe, run_name: xpe_plr2e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3}}
+  - {tune_method: xpe, run_name: xpe_plr2e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3}}
+  - {tune_method: xpe, run_name: xpe_plr5e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3}}
+  - {tune_method: xpe, run_name: xpe_plr5e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3}}
+  - {tune_method: xpe, run_name: xpe_plr5e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3}}
+  - {tune_method: xpe, run_name: xpe_plr1e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-2}}
+  - {tune_method: xpe, run_name: xpe_plr1e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-2}}
+  - {tune_method: xpe, run_name: xpe_plr1e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-2}}
+  - {tune_method: xpe, run_name: xpe_plr2e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2}}
+  - {tune_method: xpe, run_name: xpe_plr2e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2}}
+  - {tune_method: xpe, run_name: xpe_plr2e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2}}
+  - {tune_method: xpe, run_name: xpe_plr5e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2}}
+  - {tune_method: xpe, run_name: xpe_plr5e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2}}
+  - {tune_method: xpe, run_name: xpe_plr5e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2}}
 
-  # ===== spt x prompt-lr  (idx 4-7) =====
-  - {tune_method: spt, run_name: spt_plr1e-3, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
-  - {tune_method: spt, run_name: spt_plr5e-3, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3}}
-  - {tune_method: spt, run_name: spt_plr1e-2, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-2}}
-  - {tune_method: spt, run_name: spt_plr5e-2, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2}}
+  # ===== spt x prompt-lr x seed  (idx 18-35) =====
+  - {tune_method: spt, run_name: spt_plr1e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
+  - {tune_method: spt, run_name: spt_plr1e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
+  - {tune_method: spt, run_name: spt_plr1e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
+  - {tune_method: spt, run_name: spt_plr2e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3}}
+  - {tune_method: spt, run_name: spt_plr2e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3}}
+  - {tune_method: spt, run_name: spt_plr2e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3}}
+  - {tune_method: spt, run_name: spt_plr5e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3}}
+  - {tune_method: spt, run_name: spt_plr5e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3}}
+  - {tune_method: spt, run_name: spt_plr5e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3}}
+  - {tune_method: spt, run_name: spt_plr1e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-2}}
+  - {tune_method: spt, run_name: spt_plr1e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-2}}
+  - {tune_method: spt, run_name: spt_plr1e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-2}}
+  - {tune_method: spt, run_name: spt_plr2e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2}}
+  - {tune_method: spt, run_name: spt_plr2e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2}}
+  - {tune_method: spt, run_name: spt_plr2e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2}}
+  - {tune_method: spt, run_name: spt_plr5e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2}}
+  - {tune_method: spt, run_name: spt_plr5e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2}}
+  - {tune_method: spt, run_name: spt_plr5e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2}}
