@@ -313,12 +313,26 @@ def resolve_fold_seed(entry, cli_fold, cli_seed):
 
 
 def _apply_override(config, dotted_path: str, value) -> None:
-    """Set config.a.b.c = value via the path string 'a.b.c'."""
+    """Set config.a.b.c = value via the path string 'a.b.c'.
+
+    An all-digit segment indexes a LIST rather than naming an attribute, so
+    `custom_training_args.optimizer_grouped_parameters.0.lr` reaches the first
+    optimizer parameter group -- which is how the LR searches sweep the
+    prompt-side learning rate. Without this the walk hits
+    `AttributeError: 'list' object has no attribute '0'`.
+    """
     parts = dotted_path.split('.')
     obj = config
     for p in parts[:-1]:
-        obj = getattr(obj, p)
-    setattr(obj, parts[-1], value)
+        obj = obj[int(p)] if p.isdigit() and isinstance(obj, list) else getattr(obj, p)
+    last = parts[-1]
+    if last.isdigit() and isinstance(obj, list):
+        obj[int(last)] = value
+    else:
+        # getattr first so an unknown key raises instead of silently creating one
+        # on a SimpleNamespace-like config
+        getattr(obj, last)
+        setattr(obj, last, value)
 
 
 def parse_args():

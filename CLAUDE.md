@@ -169,6 +169,28 @@ builds on) — **we maintain it alongside this repo**, it is not a frozen third-
   is a real experiment, not a no-op; it only *looks* identical to SPT-base when the row
   norms never exceed `max_norm`.
 
+## Metaconfigs are immutable contracts
+
+**A metaconfig is the contract artefact for the runs it produced. Once ANY of its
+entries has been dispatched, that file must never be edited.** The run dir, the
+`run_group`, the wandb group and the `meta_config` column in every `raw.csv` all point
+back to it by name — editing it silently rewrites the description of results that
+already exist, and nobody reading the file later can tell.
+
+- **Additive changes only.** Appending NEW matrix entries is fine (that is how the
+  grid-14 seed extension was done: seeds 15-19 appended as indices 60-119, with a
+  dated comment saying so). Editing or reordering an existing entry is not — array
+  indices are positional, so a reorder also silently repoints old results.
+- **Changing an already-run entry means a NEW metaconfig**, with a new stem and hence
+  a new `run_group`: `17a_lr_search_sib_mdeberta.yml` -> `17c_...`, never an in-place
+  edit. Header comment should say what it supersedes and why.
+- Header comments describing *dispatch* (the sbatch line, partition pins, which array
+  indices were re-dispatched after a fix) are the exception: they document the file's
+  own use and may be appended to.
+- Same rule for the tune/test configs a metaconfig references. If a config must
+  change after runs exist, the runs are stale — say so explicitly rather than
+  quietly re-pointing.
+
 ## Repository layout
 
 ```
@@ -176,7 +198,7 @@ config/                         # all experiment configs (YAML)
   tune.{xpe|spt|dual}.lm.{model}.ds.{xsc|bebe|sib}.yml  # finetune a PEFT method
   test.lm.{model}.ds.{bebe[.fold]|sib}.yml           # eval; .fold = self-split test split
   proc.ds.{xsc|bebe|sib}.tok.{aya|bloom|mdeberta|mgte}.yml  # tokenize a benchmark per backbone
-  meta/{N}[a|b]_*.yml             # metaconfigs (LR sweeps etc); stem = wandb run_group
+  meta/{N}[a|b]_*.yml             # metaconfigs (LR searches, grids); stem = wandb run_group
 scripts/
   run_xlt.py                     # core: tune_phase, load_concat_dataset, discover_target_langs
   run_xlt_meta.py                # fan a metaconfig matrix over a SLURM --array; --fold N, --seed
