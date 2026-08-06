@@ -1,0 +1,269 @@
+mode: finetune # preprocess | train | finetune | evaluate | test
+
+task:
+    id: null
+    category: text_classification
+    name: topic # Topic Detection
+    metric_groups:
+    - metrics:
+        - accuracy
+    preproc_rules:
+        # Token Classification
+        flatten: false
+        filter_padded: false
+        label_id_to_name: false
+        filter_by_prefixes: false
+        # Text To Text
+        decode: false
+        label_name_strip_lower: false
+        label_name_to_float: false
+        label_name_to_id: false
+        # Others
+        verify_labels_match: false
+        calc_confusion_matrix: false
+        prediction_axis: -1
+
+peft:
+    peft_type: XPE
+    task_type: SEQ_CLS
+    # Legacy XPE SIB-200 prompt geometry (nlpka sib200_hybrid.xpe.yml), kept
+    # verbatim so the encoder rows stay comparable to the published table.
+    num_virtual_tokens: 20
+    encoder_reparameterization_type: NONE
+    encoder_hidden_size: 256
+    encoder_num_layers: 2
+    encoder_dropout: 0.1
+    # SPT: no encoder -- a plain soft prompt trained directly. This is the
+    # ablation of XPE, and simultaneously the canonical soft-prompt baseline.
+    encoder_ratio: 0
+    encoder_input_size: null
+    # null is correct for the source (zero-shot) phase. The legacy YAML carried a
+    # path here, but that was a target-phase leftover that xpe_utils.py reset to
+    # None for source training.
+    encoder_init_state_dict_path: null
+    # CrossPromptEncoderConfig defaults BOTH of these to true -- leave them false
+    # or the prompt encoder trains nothing.
+    encoder_freeze: false
+    encoder_embedding_freeze: false
+    encoder_embedding_init_type: hf_default # hf_default | xavier_uniform | xavier_normal
+    encoder_embedding_normalize: null # null | unit | clip
+    encoder_embedding_normalize_max_norm: null
+    # PEFT auto-saves only modules named classifier/score and freezes every other
+    # child. mGTE's pooler is NESTED at `new.pooler` (inside the base-model
+    # child) and is randomly initialised -- absent from the checkpoint, which
+    # ships only lm_head.* + new.* encoder tensors. Without `pooler` here it
+    # stays random AND frozen. The bare name matches the nested module; verified
+    # trainable as base_model.new.pooler.modules_to_save.default.dense.
+    # XLM-R has no pooler at all, which is why the published runs never hit this.
+    # The prompt entry must be listed too: __post_init__ only auto-fills this
+    # list when it is null, so naming `pooler` alone would drop it and the
+    # adapter would stop saving its own weights. At ratio 0 the prompt lives in
+    # `embedding`; there is no xpe_embedding/xpe_head. PEFT appends
+    # classifier/score.
+    modules_to_save:
+    - embedding
+    - pooler
+
+model:
+    architecture: mgte
+    pretrained:
+        cls: AutoModelForSequenceClassification
+        args:
+            # mGTE is a custom `NewModel` architecture whose code is fetched from
+            # a SECOND repo (config.json auto_map -> Alibaba-NLP/new-impl), so
+            # loading it executes Hub-hosted code. Pinned revisions at the time
+            # of the grid, for reproducibility and so the code cannot change
+            # under a running sweep:
+            #   Alibaba-NLP/gte-multilingual-mlm-base @ b747c5e8eb09e48c24eb3d4e48f80a79a18889ff
+            #   Alibaba-NLP/new-impl                  @ 40ced75c3017eb27626c9d4ea981bde21a2662f4
+            # Compute nodes need Hub access or a warm HF_HOME cache.
+            trust_remote_code: true
+        # 306.0M total; hidden 768, 12 layers, 12 heads, vocab 250048,
+        # max_position_embeddings 8192. The PRE-CONTRASTIVE MLM checkpoint --
+        # not the gte-multilingual-base embedding model.
+        name: Alibaba-NLP/gte-multilingual-mlm-base
+        source: huggingface # null | local | huggingface
+        checkpoint: null
+        adapter: null
+
+tokenizer:
+    source: huggingface # local | huggingface
+    # mGTE reuses XLM-R's vocabulary and declares tokenizer_class
+    # XLMRobertaTokenizer with no auto_map, so unlike the MODEL the tokenizer
+    # needs no trust_remote_code (verified: loads as XLMRobertaTokenizerFast).
+    name: Alibaba-NLP/gte-multilingual-mlm-base
+    type: null # null | wordpiece | sentpiece
+    algorithm: null
+    adapt_to_lm: false
+
+ds:
+    descriptive_name: null
+    category: benchmarks # benchmarks | corpora | collections | raw
+    # `eng_Latn` is the literal default; run_xlt swaps segment index 2 per
+    # source/target language. SIB-200 has no folds -- never pass --fold.
+    dirs: topic/sib200/eng_Latn/tokenized|Alibaba-NLP|gte-multilingual-mlm-base
+    name: null
+    type: huggingface_saved # text | csv | huggingface_saved | huggingface
+    comes_with_splits:
+        train: true
+        test: true
+        validation: true
+    input:
+        key: inputs
+        standardize_key: false
+    label:
+        key: labels
+        standardize_key: false
+        number: 7   # -> num_labels, injected by MODEL._task_derived_kwargs
+        names:
+        - science/technology
+        - travel
+        - politics
+        - sports
+        - health
+        - entertainment
+        - geography
+    # run_xlt injects this column itself (the source/target LANGUAGE index); the
+    # dataset carries `index_id` instead. Declaring the key here is the template.
+    task_id:
+        key: task_ids
+        standardize_key: false
+    preproc_rules: null
+
+eval:
+    before_training: false
+    before_training_on_test: false
+    during_training: null
+    after_training: false
+    after_training_on_test: true
+    per_task: null
+    downstream_tasks: false
+
+test:
+    run: false
+    zero_shot: false
+    zero_shot_only: false
+    save_predictions: false
+    report_to_wandb: true
+
+trainer:
+    cls: Trainer # Trainer | Seq2SeqTrainer
+
+data_collator:
+    cls: DataCollatorWithPadding
+    args:
+        # `max_length` would be inert under padding='longest'; the real 164 cap is
+        # applied at tokenization time (proc.ds.sib.tok.mgte.yml).
+        padding: 'longest' # true or longest | max_length | false
+        pad_to_multiple_of: 4
+        return_tensors: pt
+
+custom_training_args:
+    # Sampling
+    train_force_sequential: false
+    eval_force_sequential: true
+    test_force_sequential: true
+    # Early Stopping -- patience 20 is the SOURCE-phase value (paper sec. 4.4);
+    # the legacy YAML's 30 belongs to the target phase, which is out of scope.
+    early_stopping_after: 0.5
+    early_stopping_patience: 20
+    early_stopping_threshold: 0.0
+    # DECLARED DEVIATION: the published runs stopped on eval_loss (the legacy
+    # callback hardcoded it). We stop on accuracy instead, consistent with
+    # load_best_model_at_end and with the 15a probe finding that eval-loss
+    # explosion is cosmetic under prompt tuning.
+    early_stopping_metric: metric_for_best_model
+    # Final Model Saving
+    save_final_model: true
+    keep_only_final_model: true
+    # Random Task Exclusion
+    random_task_exclusion: false
+    # Do not remove in _remove_unused_columns
+    usable_columns:
+    - task_ids
+    # THE LR/WD RECIPE (paper sec. 4.4 + xpe_utils.py:289-300): two parameter
+    # groups, the same shape for every method. The prompt embeddings train at
+    # 5e-3 with NO weight decay; the prompt-encoder MLP and the classification
+    # head stay on the global 5e-5 / 0.01 below.
+    # SPT's prompt is `self.embedding`; the bare name is correct here (there is
+    # no xpe_embedding at ratio 0). Note the global weight_decay below STAYS
+    # 0.01: paper sec. 4.4 says "the classification head remains under the same
+    # settings as in XPE" -- WD 0 is a property of the PROMPT group, not of SPT.
+    optimizer_grouped_parameters:
+    - param_name_parts:
+        - embedding
+      lr: 5e-3
+      weight_decay: 0.0
+
+training_args:
+    cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
+    args:
+        # Training length -- max_steps OVERRIDES num_train_epochs in HF. The
+        # legacy YAML's 10 epochs was dead in every published run; the real
+        # budget came from xpe_utils.py slot 9 and paper sec. 4.4 ("a hard limit
+        # of 24,000 optimization steps for source"). At bs 32 on SIB-200's 701
+        # rows/lang, 10 epochs would be 660 steps for a 3-lang source group -- a
+        # 36x undertrain in exactly the rows where SPT and XPE swap places.
+        num_train_epochs: 10
+        max_steps: 24000
+
+        # Batch Size
+        per_device_train_batch_size: 32
+        gradient_accumulation_steps: 1
+        per_device_eval_batch_size: 256
+        eval_accumulation_steps: 1
+
+        # Logging
+        logging_strategy: steps # steps
+        logging_first_step: false
+        logging_steps: 50
+        report_to: wandb # wandb | none
+
+        # Evaluation
+        eval_strategy: epoch
+        eval_steps: null
+
+        # Saving
+        save_strategy: epoch # no / steps / epoch / best
+        save_steps: null
+        save_total_limit: 1
+        save_safetensors: true
+        overwrite_output_dir: true
+        push_to_hub: false
+
+        # Loading Best Model
+        load_best_model_at_end: true
+        metric_for_best_model: accuracy
+        greater_is_better: true
+
+        # Optimizer -- Adafactor, from xpe_utils.py slot 8 and paper sec. 4.4
+        # ("Optimization is performed using Adafactor with a fixed learning rate
+        # and a cosine schedule with restarts (2 cycles)"). The legacy config
+        # file has no `optim:` key at all, which is why reading it alone reads as
+        # AdamW. Do NOT port the legacy optim_args: the transformers ADAFACTOR
+        # branch hard-sets scale_parameter/relative_step to False and never
+        # merges optim_args, so they were inert.
+        optim: adafactor
+        learning_rate: 5e-5
+        lr_scheduler_type: cosine_with_restarts
+        lr_scheduler_kwargs:
+            num_cycles: 2
+        warmup_ratio: 0.1
+        weight_decay: 0.01
+        max_grad_norm: 1.0
+
+        # Grouping
+        group_by_length: true
+        length_column_name: length
+
+        # Others
+        full_determinism: false
+        bf16: true
+        fp16: false
+
+cuda:
+    empty_cache_steps: null
+
+env:
+    PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+    TOKENIZERS_PARALLELISM: 'true'

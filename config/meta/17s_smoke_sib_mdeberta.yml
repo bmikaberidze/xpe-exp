@@ -33,7 +33,7 @@
 #     --partition=H100,H100-PCI,H100-Trails,H200,H200-PCI,A100-80GB \
 #     runtime/clusters/pegasus/shell/run.sh --site-packages \
 #     "python -m scripts.run_xlt_meta \
-#         --meta-config ./config/meta/17s_smoke_sib.yml \
+#         --meta-config ./config/meta/17s_smoke_sib_mdeberta.yml \
 #         --test-config ./config/test.lm.mdeberta.ds.sib.yml \
 #         --source-group enarzho \
 #         --target-langs kat_Geor,swh_Latn,nqo_Nkoo"

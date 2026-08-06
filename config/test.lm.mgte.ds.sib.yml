@@ -1,0 +1,168 @@
+mode: test # preprocess | train | finetune | evaluate | test
+
+task:
+    id: null
+    category: text_classification
+    name: topic # Topic Detection
+    metric_groups:
+    - metrics:
+        - accuracy
+    preproc_rules:
+        # Token Classification
+        flatten: false
+        filter_padded: false
+        label_id_to_name: false
+        filter_by_prefixes: false
+        # Text To Text
+        decode: false
+        label_name_strip_lower: false
+        label_name_to_float: false
+        label_name_to_id: false
+        # Others
+        verify_labels_match: false
+        calc_confusion_matrix: false
+        prediction_axis: -1
+
+peft:
+    peft_type: null
+    task_type: null
+
+model:
+    architecture: mgte
+    pretrained:
+        cls: AutoModelForSequenceClassification
+        args:
+            # custom NewModel; code comes from Alibaba-NLP/new-impl (see the
+            # tune configs for the pinned revisions)
+            trust_remote_code: true
+        name: Alibaba-NLP/gte-multilingual-mlm-base
+        source: huggingface # null | local | huggingface
+        checkpoint: null
+        # run_xlt.wire_test_to_adapter fills this in from the tune phase.
+        adapter: null
+
+tokenizer:
+    source: huggingface # local | huggingface
+    name: Alibaba-NLP/gte-multilingual-mlm-base
+    type: null # null | wordpiece | sentpiece
+    algorithm: null
+    adapt_to_lm: false
+
+ds:
+    descriptive_name: null
+    category: benchmarks # benchmarks | corpora | collections | raw
+    # `eng_Latn` is the literal default; run_xlt swaps segment index 2 per
+    # source/target language. SIB-200 has no folds -- never pass --fold.
+    dirs: topic/sib200/eng_Latn/tokenized|Alibaba-NLP|gte-multilingual-mlm-base
+    name: null
+    type: huggingface_saved # text | csv | huggingface_saved | huggingface
+    comes_with_splits:
+        train: false
+        test: true
+        validation: false
+    input:
+        key: inputs
+        standardize_key: false
+    label:
+        key: labels
+        standardize_key: false
+        number: 7   # -> num_labels, injected by MODEL._task_derived_kwargs
+        names:
+        - science/technology
+        - travel
+        - politics
+        - sports
+        - health
+        - entertainment
+        - geography
+    # run_xlt injects this column itself (the source/target LANGUAGE index); the
+    # dataset carries `index_id` instead. Declaring the key here is the template.
+    task_id:
+        key: task_ids
+        standardize_key: false
+    preproc_rules: null
+
+eval:
+    before_training: false
+    before_training_on_test: false
+    during_training: null
+    after_training: false
+    after_training_on_test: false
+    per_task: null
+    downstream_tasks: false
+
+test:
+    run: true
+    zero_shot: true
+    zero_shot_only: true
+    save_predictions: false
+    report_to_wandb: true
+
+trainer:
+    cls: Trainer # Trainer | Seq2SeqTrainer
+
+data_collator:
+    cls: DataCollatorWithPadding
+    args:
+        # `max_length` would be inert under padding='longest'; the real 164 cap is
+        # applied at tokenization time (proc.ds.sib.tok.mgte.yml).
+        padding: 'longest' # true or longest | max_length | false
+        pad_to_multiple_of: 4
+        return_tensors: pt
+
+custom_training_args:
+    # Sampling
+    train_force_sequential: false
+    eval_force_sequential: true
+    test_force_sequential: true
+    save_final_model: false
+    keep_only_final_model: true
+    # Random Task Exclusion
+    random_task_exclusion: false
+    # Do not remove in _remove_unused_columns
+    usable_columns:
+    - task_ids
+
+training_args:
+    cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
+    args:
+
+        # Batch Size
+        per_device_train_batch_size: 32
+        gradient_accumulation_steps: 1
+        per_device_eval_batch_size: 256
+        eval_accumulation_steps: 1
+
+        # Logging
+        logging_strategy: steps # steps
+        logging_first_step: false
+        logging_steps: 50
+        report_to: wandb # wandb | none
+
+        # Evaluation
+        eval_strategy: epoch
+        eval_steps: null
+
+        # Saving
+        save_strategy: 'no' # no / steps / epoch / best
+        save_safetensors: true
+        overwrite_output_dir: true
+        push_to_hub: false
+
+
+
+        # Grouping
+        group_by_length: true
+        length_column_name: length
+
+        # Others
+        full_determinism: false
+        bf16: true
+        fp16: false
+
+cuda:
+    empty_cache_steps: null
+
+env:
+    PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+    TOKENIZERS_PARALLELISM: 'true'
