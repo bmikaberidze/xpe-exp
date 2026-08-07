@@ -67,7 +67,24 @@ def aggregate(df: pd.DataFrame, group_key: str = 'learning_rate') -> pd.DataFram
     # (ascending timestamp), so keep='last' retains the latest = the re-run and
     # counts every seed exactly once. (LR-search runs are unique per lr, so this
     # is a no-op there.)
+    before = len(df)
     df = df.drop_duplicates(subset=['method', group_key, 'fold', 'seed'], keep='last')
+    dropped = before - len(df)
+    if dropped:
+        # A crashed run and its re-run legitimately collide. But if MOST rows
+        # collapse, the group key is almost certainly constant -- e.g. grouping
+        # on `learning_rate` while the sweep actually varied `prompt_lr` -- and
+        # the result would silently be an average over a near-arbitrary subset.
+        msg = (f'note: dropped {dropped}/{before} duplicate rows on '
+               f"['method', {group_key!r}, 'fold', 'seed'] (crashed runs + re-runs)")
+        if dropped > before / 2:
+            raise ValueError(
+                f'{msg}\n'
+                f'That is more than half the rows, so {group_key!r} is probably CONSTANT '
+                f'across these runs and is the wrong --group-by column. Columns present: '
+                f'{sorted(df.columns)}. If the sweep varied the prompt-embedding LR, use '
+                f'--group-by prompt_lr.')
+        print(msg)
     rows = []
     for (method, key, fold), x in df.groupby(['method', group_key, 'fold']):
         rows.append({

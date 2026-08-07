@@ -400,6 +400,21 @@ def load_concat_dataset(base_config, langs, assign_task_ids=False):
 # --- Tune / Test phases -----------------------------------------------------
 
 
+def _prompt_group_lr(tune_config):
+    """LR of the first custom optimizer parameter group, or None if unused.
+
+    The published recipe trains the prompt embeddings at their own LR via
+    `custom_training_args.optimizer_grouped_parameters`; everything else uses
+    `training_args.args.learning_rate`. Sweeps target the former, so it has to
+    be recorded alongside the latter.
+    """
+    groups = getattr(getattr(tune_config, 'custom_training_args', None),
+                     'optimizer_grouped_parameters', None)
+    if not groups:
+        return None
+    return getattr(groups[0], 'lr', None)
+
+
 def tune_phase(tune_config, source_langs_sorted):
     tokenizer = load_tokenizer(tune_config)
     dataset = load_concat_dataset(tune_config, source_langs_sorted)
@@ -681,6 +696,13 @@ def run_xlt(
             'fold': fold,
             'seed': seed_used,
             'learning_rate': getattr(tune_config.training_args.args, 'learning_rate', None),
+            # The prompt-embedding group's LR, i.e. custom_training_args
+            # .optimizer_grouped_parameters[0].lr. This is the SECOND learning
+            # rate in the published recipe (5e-3 vs the 5e-5 above) and the one
+            # the SIB-200 LR searches sweep. It must be a column here or
+            # unify_xlt_valid_res --group-by has nothing to group on and
+            # silently collapses every cell of the sweep into one.
+            'prompt_lr': _prompt_group_lr(tune_config),
             'best_val_acc': val_res['best_val_acc'],
             'best_step': val_res['best_step'],
             'metric': val_res['metric'],

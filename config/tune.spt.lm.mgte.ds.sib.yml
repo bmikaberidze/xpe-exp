@@ -30,7 +30,7 @@ peft:
     # verbatim so the encoder rows stay comparable to the published table.
     num_virtual_tokens: 20
     encoder_reparameterization_type: NONE
-    encoder_hidden_size: 256
+    encoder_hidden_size: 192   # hidden/4, the repo ratio (xlmr 1024->256, decoders 4096->1024)
     encoder_num_layers: 2
     encoder_dropout: 0.1
     # SPT: no encoder -- a plain soft prompt trained directly. This is the
@@ -191,7 +191,11 @@ custom_training_args:
     # settings as in XPE" -- WD 0 is a property of the PROMPT group, not of SPT.
     optimizer_grouped_parameters:
     - param_name_parts:
-        - embedding
+        # '.embedding' (with the dot) matches
+        # prompt_encoder.default.embedding.* but NOT ...default.xpe_embedding.*,
+        # because matching is a plain substring test. A bare 'embedding' would
+        # catch both and silently put DUAL's XPE half on the SPT rate.
+        - .embedding
       lr: 5e-3
       weight_decay: 0.0
 

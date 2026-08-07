@@ -30,7 +30,7 @@ peft:
     # verbatim so the encoder rows stay comparable to the published table.
     num_virtual_tokens: 20
     encoder_reparameterization_type: MLP
-    encoder_hidden_size: 256
+    encoder_hidden_size: 192   # hidden/4, the repo ratio (xlmr 1024->256, decoders 4096->1024)
     encoder_num_layers: 2
     encoder_dropout: 0.1
     # DUAL: concat of a standard soft prompt and an encoder-produced one. 0.3 is
@@ -193,7 +193,11 @@ custom_training_args:
     # That is the published behaviour, not an oversight.
     optimizer_grouped_parameters:
     - param_name_parts:
-        - xpe_embedding
+        # '.embedding' (with the dot) matches
+        # prompt_encoder.default.embedding.* but NOT ...default.xpe_embedding.*,
+        # because matching is a plain substring test. A bare 'embedding' would
+        # catch both and silently put DUAL's XPE half on the SPT rate.
+        - .embedding
       lr: 5e-3
       weight_decay: 0.0
 

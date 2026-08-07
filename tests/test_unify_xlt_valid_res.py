@@ -114,3 +114,37 @@ def test_aggregate_still_separates_real_folds():
     out = aggregate(df)
     assert len(out) == 4                      # 2 lrs x 2 folds, kept separate
     assert sorted(out['fold'].unique()) == [0, 1]
+
+
+# --- guard against grouping on a constant column ----------------------------
+
+def _sweep_rows(group_col='prompt_lr'):
+    """18 rows: 6 swept values x 3 seeds, with a CONSTANT learning_rate column."""
+    rows = []
+    for v in (1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2):
+        for seed, acc in ((11, 0.70), (12, 0.72), (13, 0.74)):
+            rows.append({'method': 'xpe', 'learning_rate': 5e-5, group_col: v,
+                         'seed': seed, 'best_val_acc': acc + v})
+    return pd.DataFrame(rows)
+
+
+def test_aggregate_on_the_swept_column_keeps_every_cell():
+    out = aggregate(_sweep_rows(), group_key='prompt_lr')
+    assert len(out) == 6                 # one cell per swept value
+    assert set(out['n_seeds']) == {3}    # no row silently dropped
+
+
+def test_aggregate_raises_when_group_key_is_constant():
+    # grouping on learning_rate (constant 5e-5) would collapse 18 rows to 3 and
+    # average over a near-arbitrary subset -- that must not pass silently
+    with pytest.raises(ValueError, match='probably CONSTANT'):
+        aggregate(_sweep_rows(), group_key='learning_rate')
+
+
+def test_aggregate_still_tolerates_a_genuine_rerun_duplicate():
+    df = _sweep_rows()
+    dup = df.iloc[[0]].copy()
+    dup['best_val_acc'] = 0.99          # a crashed run's re-run
+    out = aggregate(pd.concat([df, dup], ignore_index=True), group_key='prompt_lr')
+    assert len(out) == 6
+    assert set(out['n_seeds']) == {3}

@@ -30,7 +30,7 @@ peft:
     # verbatim so the encoder rows stay comparable to the published table.
     num_virtual_tokens: 20
     encoder_reparameterization_type: MLP
-    encoder_hidden_size: 256
+    encoder_hidden_size: 192   # hidden/4, the repo ratio (xlmr 1024->256, decoders 4096->1024)
     encoder_num_layers: 2
     encoder_dropout: 0.1
     # XPE: the whole prompt is encoder-produced.
@@ -179,18 +179,14 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # THE LR/WD RECIPE (paper sec. 4.4 + xpe_utils.py:289-300): two parameter
-    # groups, the same shape for every method. The prompt embeddings train at
-    # 5e-3 with NO weight decay; the prompt-encoder MLP and the classification
-    # head stay on the global 5e-5 / 0.01 below.
-    # Matching is `any(part in name)` -- a SUBSTRING test -- so a bare
-    # 'embedding' would also catch 'xpe_embedding'. XPE and DUAL must name
-    # xpe_embedding exactly; only SPT uses the bare 'embedding'.
-    optimizer_grouped_parameters:
-    - param_name_parts:
-        - xpe_embedding
-      lr: 5e-3
-      weight_decay: 0.0
+    # ONE learning rate for everything XPE trains -- prompt embeddings, the
+    # xpe_head MLP, the pooler and the classifier -- per xpe.pdf sec. 4.4: "For
+    # XPE, we use a learning rate of 5e-5 ... for BOTH the prompt encoder and the
+    # classification head." There is deliberately no optimizer_grouped_parameters
+    # block here; training_args.args.learning_rate below governs all of it.
+    # (The legacy CODE additionally carved xpe_embedding out at 5e-3, which the
+    # paper never mentions and which meant a sweep of that group touched only
+    # 15,360 of 1,071,367 trainable params -- 1.4%. Dropped.)
 
 training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
