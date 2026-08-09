@@ -1,0 +1,108 @@
+# PHASE B of the SIB-200 LR search on mdeberta: the PROMPT-EMBEDDING lr, head pinned
+# at Phase A's winner 5e-4. 54 cells = 3 arms x 6 prompt LRs x 3 seeds.
+#
+# Phase A picked the head/global lr: 17a 5e-4 best (.8190 vs .7708 at 5e-5, +4.8, 3.1x sd).
+# mGTE picked 5e-4 too, independently -- 10x the paper. See docs/paper-notes.md sec. 1.
+#
+# SWEPT: custom_training_args.optimizer_grouped_parameters.0.lr only -- 'xpe_embedding'
+# for XPE, '.embedding' for SPT. Head (xpe_head+pooler+classifier) fixed at 5e-4 in
+# every cell, both methods (paper sec. 4.4 shares the head across methods = fair).
+#
+# LADDER centred on the legacy RATIO (prompt 100x head), not the legacy absolute:
+#   5e-4 (1x, CONTROL) | 2e-3 | 5e-3 (legacy abs) | 2e-2 | 5e-2 (legacy ratio) | 1e-1
+# At 1x the group is a no-op, so those cells replay Phase A's winner. If 1x wins, the
+# paper's single-LR prescription is confirmed and the carve-out is dropped from the grid.
+# Sweeping XPE's embedding at all departs from paper AND legacy (neither tuned it).
+#
+# THREE ARMS, because prompt-group wd is not shared: SPT keeps legacy wd 0.0, while
+# XPE needs wd 0.01 (== global) for the 1x no-op. So XPE runs both:
+#   0-17  xpe wd 0.01  (no-op-at-1x arm; Phase-A control)
+#   18-35 xpe wd 0.0   (wd matched to SPT; fair-comparison arm)
+#   36-53 spt wd 0.0   (config default)
+# Arms 1 vs 2 differ ONLY in wd, so they also isolate the prompt-group wd effect.
+#
+# BUDGET 32000 (up from 24000): at 5e-4 mDeBERTa still peaks AT the wall in 3/3 seeds.
+# So this file moves prompt LR *and* budget vs Phase A -- the 1x control absorbs the budget delta.
+#
+# No new tune configs: the xpe group lives in tune.xpe.lm.mdeberta.ds.sib.yml as a no-op
+# (an absent key cannot be overridden). CHECK task 0's .out for '[WARNING] No parameters
+# matched' -- an unmatched matcher is silently dropped and looks like a working no-op.
+#
+# Selection on VALIDATION ACCURACY. --skip-test. No folds (official 701/99/204 splits).
+# Non-B200 pin REQUIRED: mDeBERTa jit.scripts DebertaV2 and this NVRTC lacks sm_100.
+# Dispatch:
+#   sbatch --array=0-53%10 --mem=64G \
+#     --partition=H100,H100-PCI,H100-Trails,H200,H200-PCI,A100-80GB \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m scripts.run_xlt_meta \
+#           --meta-config ./config/meta/18a_prompt_lr_search_sib_mdeberta.yml \
+#           --test-config ./config/test.lm.mdeberta.ds.sib.yml \
+#           --source-group mdeberta_seen --skip-test"
+#
+# Pick: unify_xlt_valid_res <dir> --group-by prompt_lr (per arm; do not pool arms)
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.mdeberta.ds.sib.yml
+  spt: ./config/tune.spt.lm.mdeberta.ds.sib.yml
+
+matrix:
+
+  # ===== xpe, prompt-group wd 0.01 (== global; the no-op-at-1x arm)  (idx 0-17) =====
+  - {tune_method: xpe, run_name: xpe_plr5e-4_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr5e-4_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr5e-4_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr2e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr2e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr2e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr5e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr5e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr5e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr2e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr2e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr2e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr5e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr5e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr5e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr1e-1_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-1, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr1e-1_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-1, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_plr1e-1_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-1, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+
+  # ===== xpe, prompt-group wd 0.0 (matches SPT's group)  (idx 18-35) =====
+  - {tune_method: xpe, run_name: xpe_wd0_plr5e-4_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr5e-4_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr5e-4_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr2e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr2e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr2e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr5e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr5e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr5e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr2e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr2e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr2e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr5e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr5e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr5e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr1e-1_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-1, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr1e-1_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-1, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: xpe, run_name: xpe_wd0_plr1e-1_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-1, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+
+  # ===== spt, prompt-group wd 0.0 (config default, legacy)  (idx 36-53) =====
+  - {tune_method: spt, run_name: spt_plr5e-4_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr5e-4_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr5e-4_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr2e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr2e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr2e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr5e-3_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr5e-3_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr5e-3_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-3, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr2e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr2e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr2e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr5e-2_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr5e-2_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr5e-2_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-2, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr1e-1_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-1, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr1e-1_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-1, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}
+  - {tune_method: spt, run_name: spt_plr1e-1_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-1, training_args.args.learning_rate: 5.0e-4, training_args.args.max_steps: 32000}}

@@ -10,11 +10,14 @@
 #
 # WHAT IS SWEPT NOW. XPE has ONE learning rate covering everything it trains,
 # per xpe.pdf sec. 4.4: "For XPE, we use a learning rate of 5e-5 and weight decay
-# of 0.1 for BOTH the prompt encoder and the classification head." The tune
-# config therefore carries NO optimizer_grouped_parameters block, and
-# training_args.args.learning_rate governs prompt embeddings + xpe_head + pooler
-# + classifier together. (The legacy CODE carved xpe_embedding out at 5e-3; the
-# paper never mentions that, and it is what made the previous sweep vacuous.)
+# of 0.1 for BOTH the prompt encoder and the classification head." One rate
+# governs prompt embeddings + xpe_head + pooler + classifier together. (The
+# legacy CODE carved xpe_embedding out at 5e-3; the paper never mentions that,
+# and it is what made the previous sweep vacuous.)
+#
+# REPLAY NOTE 2026-08-08 (behaviour-preserving, results unchanged): these ran with
+# NO param group, so xpe_embedding moved at each cell's lr. Phase B added a group to
+# the tune config, so each cell now also sets group.0.lr to that same lr.
 #
 # WHY XPE FIRST, SPT SECOND. The classification head is shared by both methods
 # and the paper fixes it to the same value for both ("the classification head
@@ -50,21 +53,21 @@ tune_configs:
 matrix:
 
   # ===== xpe x lr x seed  (idx 0-17) =====
-  - {tune_method: xpe, run_name: xpe_lr2e-5_s11, seed: 11, overrides: {training_args.args.learning_rate: 2.0e-5}}
-  - {tune_method: xpe, run_name: xpe_lr2e-5_s12, seed: 12, overrides: {training_args.args.learning_rate: 2.0e-5}}
-  - {tune_method: xpe, run_name: xpe_lr2e-5_s13, seed: 13, overrides: {training_args.args.learning_rate: 2.0e-5}}
-  - {tune_method: xpe, run_name: xpe_lr5e-5_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-5}}
-  - {tune_method: xpe, run_name: xpe_lr5e-5_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-5}}
-  - {tune_method: xpe, run_name: xpe_lr5e-5_s13, seed: 13, overrides: {training_args.args.learning_rate: 5.0e-5}}
-  - {tune_method: xpe, run_name: xpe_lr1e-4_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0e-4}}
-  - {tune_method: xpe, run_name: xpe_lr1e-4_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0e-4}}
-  - {tune_method: xpe, run_name: xpe_lr1e-4_s13, seed: 13, overrides: {training_args.args.learning_rate: 1.0e-4}}
-  - {tune_method: xpe, run_name: xpe_lr2e-4_s11, seed: 11, overrides: {training_args.args.learning_rate: 2.0e-4}}
-  - {tune_method: xpe, run_name: xpe_lr2e-4_s12, seed: 12, overrides: {training_args.args.learning_rate: 2.0e-4}}
-  - {tune_method: xpe, run_name: xpe_lr2e-4_s13, seed: 13, overrides: {training_args.args.learning_rate: 2.0e-4}}
-  - {tune_method: xpe, run_name: xpe_lr5e-4_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-4}}
-  - {tune_method: xpe, run_name: xpe_lr5e-4_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-4}}
-  - {tune_method: xpe, run_name: xpe_lr5e-4_s13, seed: 13, overrides: {training_args.args.learning_rate: 5.0e-4}}
-  - {tune_method: xpe, run_name: xpe_lr1e-3_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0e-3}}
-  - {tune_method: xpe, run_name: xpe_lr1e-3_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0e-3}}
-  - {tune_method: xpe, run_name: xpe_lr1e-3_s13, seed: 13, overrides: {training_args.args.learning_rate: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr2e-5_s11, seed: 11, overrides: {training_args.args.learning_rate: 2.0e-5, custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr2e-5_s12, seed: 12, overrides: {training_args.args.learning_rate: 2.0e-5, custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr2e-5_s13, seed: 13, overrides: {training_args.args.learning_rate: 2.0e-5, custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr5e-5_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-5, custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr5e-5_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-5, custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr5e-5_s13, seed: 13, overrides: {training_args.args.learning_rate: 5.0e-5, custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-5}}
+  - {tune_method: xpe, run_name: xpe_lr1e-4_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0e-4, custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr1e-4_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0e-4, custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr1e-4_s13, seed: 13, overrides: {training_args.args.learning_rate: 1.0e-4, custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr2e-4_s11, seed: 11, overrides: {training_args.args.learning_rate: 2.0e-4, custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr2e-4_s12, seed: 12, overrides: {training_args.args.learning_rate: 2.0e-4, custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr2e-4_s13, seed: 13, overrides: {training_args.args.learning_rate: 2.0e-4, custom_training_args.optimizer_grouped_parameters.0.lr: 2.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e-4_s11, seed: 11, overrides: {training_args.args.learning_rate: 5.0e-4, custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e-4_s12, seed: 12, overrides: {training_args.args.learning_rate: 5.0e-4, custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr5e-4_s13, seed: 13, overrides: {training_args.args.learning_rate: 5.0e-4, custom_training_args.optimizer_grouped_parameters.0.lr: 5.0e-4}}
+  - {tune_method: xpe, run_name: xpe_lr1e-3_s11, seed: 11, overrides: {training_args.args.learning_rate: 1.0e-3, custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr1e-3_s12, seed: 12, overrides: {training_args.args.learning_rate: 1.0e-3, custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}
+  - {tune_method: xpe, run_name: xpe_lr1e-3_s13, seed: 13, overrides: {training_args.args.learning_rate: 1.0e-3, custom_training_args.optimizer_grouped_parameters.0.lr: 1.0e-3}}

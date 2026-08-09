@@ -179,14 +179,13 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # ONE learning rate for everything XPE trains -- prompt embeddings, the
-    # xpe_head MLP, the pooler and the classifier -- per xpe.pdf sec. 4.4: "For
-    # XPE, we use a learning rate of 5e-5 ... for BOTH the prompt encoder and the
-    # classification head." There is deliberately no optimizer_grouped_parameters
-    # block here; training_args.args.learning_rate below governs all of it.
-    # (The legacy CODE additionally carved xpe_embedding out at 5e-3, which the
-    # paper never mentions and which meant a sweep of that group touched only
-    # 15,360 of 1,071,367 trainable params -- 1.4%. Dropped.)
+    # ONE LR for everything XPE trains (xpe.pdf sec. 4.4). The group below is a
+    # NO-OP -- lr/wd MUST equal the global below; it exists only so a metaconfig
+    # can override the xpe_embedding lr (an absent key cannot be overridden).
+    optimizer_grouped_parameters:
+    - param_name_parts: [xpe_embedding]   # substring match; disjoint from SPT's '.embedding'
+      lr: 5e-5
+      weight_decay: 0.01
 
 training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments

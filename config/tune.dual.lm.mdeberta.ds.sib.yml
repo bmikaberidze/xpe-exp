@@ -187,6 +187,11 @@ custom_training_args:
         - .embedding
       lr: 5e-3
       weight_decay: 0.0
+    # Group 1 is a NO-OP -- lr/wd MUST equal the global; it exists only so a
+    # metaconfig can override DUAL's XPE-side lr. NB _prompt_group_lr logs group 0 only.
+    - param_name_parts: [xpe_embedding]
+      lr: 5e-5
+      weight_decay: 0.01
 
 training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
