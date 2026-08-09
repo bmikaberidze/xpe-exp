@@ -34,7 +34,7 @@ peft:
     encoder_num_layers: 2
     encoder_dropout: 0.1
     # DUAL: concat of a standard soft prompt and an encoder-produced one. 0.3 is
-    # the config default (DUAL^XPE-30); metaconfig 18a overrides it to 0.7.
+    # the config default (DUAL^XPE-30); metaconfig 19a overrides it to 0.7 (d70).
     encoder_ratio: 0.3
     encoder_input_size: null
     # null is correct for the source (zero-shot) phase. The legacy YAML carried a
@@ -169,15 +169,10 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # THE LR/WD RECIPE (paper sec. 4.4 + xpe_utils.py:289-300): two parameter
-    # groups, the same shape for every method. The prompt embeddings train at
-    # 5e-3 with NO weight decay; the prompt-encoder MLP and the classification
-    # head stay on the global 5e-5 / 0.01 below.
-    # Matching is `any(part in name)` -- a SUBSTRING test -- so a bare
-    # 'embedding' would ALSO catch 'xpe_embedding'. Naming xpe_embedding exactly
-    # is what the legacy code does for both MLP-reparameterised arms, so DUAL's
-    # SPT-side `embedding` trains at the global 5e-5 / 0.01 rather than 5e-3 / 0.
-    # That is the published behaviour, not an oversight.
+    # LR/WD RECIPE, per side (measured: Phase A 17a/17b global, Phase B 18a/18b groups):
+    # SPT side `.embedding` at 5e-2 / wd 0 (Phase B: +3.7/+2.2 pts over a shared lr);
+    # XPE side `xpe_embedding` at the global 5e-4 / 0.01 (Phase B found no gain from
+    # separating it, and equal lr/wd makes group 1 a no-op).
     optimizer_grouped_parameters:
     - param_name_parts:
         # '.embedding' (with the dot) matches
@@ -185,12 +180,12 @@ custom_training_args:
         # because matching is a plain substring test. A bare 'embedding' would
         # catch both and silently put DUAL's XPE half on the SPT rate.
         - .embedding
-      lr: 5e-3
+      lr: 5e-2
       weight_decay: 0.0
     # Group 1 is a NO-OP -- lr/wd MUST equal the global; it exists only so a
     # metaconfig can override DUAL's XPE-side lr. NB _prompt_group_lr logs group 0 only.
     - param_name_parts: [xpe_embedding]
-      lr: 5e-5
+      lr: 5e-4
       weight_decay: 0.01
 
 training_args:
@@ -242,7 +237,7 @@ training_args:
         # branch hard-sets scale_parameter/relative_step to False and never
         # merges optim_args, so they were inert.
         optim: adafactor
-        learning_rate: 5e-5
+        learning_rate: 5e-4
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2

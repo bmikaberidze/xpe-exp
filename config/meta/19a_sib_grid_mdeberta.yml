@@ -1,0 +1,96 @@
+# FULL SIB-200 zero-shot XLT grid, mDeBERTa-v3-base -- the encoder twin of grid 14.
+# 40 cells = 4 methods x 10 seeds. NO fold axis (SIB-200 ships official 701/99/204).
+#   method = xpe (ratio 1), spt (ratio 0), d30 (0.3), d70 (0.7)
+#   seed   = 11..20 -- 10 seeds, matching the paper's zero-shot replication count
+#            (p.6); at n=5 its ~2.8-pt effects are not separable.
+# SOURCE GROUP is a CLI axis, dispatched one array at a time (never a loop over runs):
+#   enarzho (3) | joshi5 (7) | mdeberta_seen (92)  ->  120 runs for this backbone.
+#
+# HYPERPARAMETERS ARE MEASURED, NOT INHERITED -- see docs/paper-notes.md sec. 1 + 6:
+#   head/global lr  5e-4   (Phase A 17a; 10x the paper's 5e-5, +4.8 pts, both backbones)
+#   xpe prompt lr   = global, i.e. NO carve-out (Phase B 18a/18b: no transferable gain,
+#                     and the two backbones trended OPPOSITE ways -> paper's single LR)
+#   spt prompt lr   5e-2 / wd 0  (Phase B: +3.7 pts over a shared lr; 100x the head,
+#                     preserving the legacy ratio; plateau 5e-3..1e-1)
+#   dual            per side: SPT half 5e-2/wd0, XPE half = global
+#   max_steps       24000 (Adafactor, cosine w/ restarts). 32000 did NOT help: the 1x
+#                   control scored 0.8083 at 32k vs 0.8190 at 24k. Patience 20.
+# All of the above live in the tune configs; this file overrides only encoder_ratio.
+#
+# Selection on VALIDATION accuracy; test phase RUNS (no --skip-test) -> per-language
+# zero-shot XLT accuracies for every target language.
+#
+# mdeberta_seen is TAKEN TO BE the paper's Seen-92 (mDeBERTa trains on CC100 like
+# XLM-R) -- an assumption, not a published language list; see src/sib200_meta.py.
+# Base-size backbone, so absolute accuracies sit below the published XLM-R-large
+# table; the XPE-vs-SPT contrast is within-backbone and unaffected.
+#
+# !! mDeBERTa CANNOT RUN ON B200 -- DeBERTa-v2 jit.scripts build_relative_position and
+# this container's NVRTC does not know sm_100. The DEFAULT partition includes B200, so
+# the pin below is REQUIRED.
+# Dispatch ONE group at a time, each confirmed landed before the next:
+#   sbatch --array=0-39%10 --mem=64G \
+#     --partition=H100,H100-PCI,H100-Trails,H200,H200-PCI,A100-80GB \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m scripts.run_xlt_meta \
+#           --meta-config ./config/meta/19a_sib_grid_mdeberta.yml \
+#           --test-config ./config/test.lm.mdeberta.ds.sib.yml \
+#           --source-group enarzho"        # then joshi5, then mdeberta_seen
+#
+# Aggregate: unify_xlt_test_res.py per group dir, then aggregate_xlt_res.py.
+
+tune_configs:
+  xpe: ./config/tune.xpe.lm.mdeberta.ds.sib.yml
+  spt: ./config/tune.spt.lm.mdeberta.ds.sib.yml
+  d30: ./config/tune.dual.lm.mdeberta.ds.sib.yml
+  d70: ./config/tune.dual.lm.mdeberta.ds.sib.yml
+
+matrix:
+
+  # ===== xpe (encoder_ratio 1) x seed{11..20}  (idx 0-9) =====
+  - {tune_method: xpe, run_name: xpe_s11, seed: 11}
+  - {tune_method: xpe, run_name: xpe_s12, seed: 12}
+  - {tune_method: xpe, run_name: xpe_s13, seed: 13}
+  - {tune_method: xpe, run_name: xpe_s14, seed: 14}
+  - {tune_method: xpe, run_name: xpe_s15, seed: 15}
+  - {tune_method: xpe, run_name: xpe_s16, seed: 16}
+  - {tune_method: xpe, run_name: xpe_s17, seed: 17}
+  - {tune_method: xpe, run_name: xpe_s18, seed: 18}
+  - {tune_method: xpe, run_name: xpe_s19, seed: 19}
+  - {tune_method: xpe, run_name: xpe_s20, seed: 20}
+
+  # ===== spt (encoder_ratio 0) x seed{11..20}  (idx 10-19) =====
+  - {tune_method: spt, run_name: spt_s11, seed: 11}
+  - {tune_method: spt, run_name: spt_s12, seed: 12}
+  - {tune_method: spt, run_name: spt_s13, seed: 13}
+  - {tune_method: spt, run_name: spt_s14, seed: 14}
+  - {tune_method: spt, run_name: spt_s15, seed: 15}
+  - {tune_method: spt, run_name: spt_s16, seed: 16}
+  - {tune_method: spt, run_name: spt_s17, seed: 17}
+  - {tune_method: spt, run_name: spt_s18, seed: 18}
+  - {tune_method: spt, run_name: spt_s19, seed: 19}
+  - {tune_method: spt, run_name: spt_s20, seed: 20}
+
+  # ===== d30 (encoder_ratio 0.3) x seed{11..20}  (idx 20-29) =====
+  - {tune_method: d30, run_name: d30_s11, seed: 11, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s12, seed: 12, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s13, seed: 13, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s14, seed: 14, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s15, seed: 15, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s16, seed: 16, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s17, seed: 17, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s18, seed: 18, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s19, seed: 19, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s20, seed: 20, overrides: {peft.encoder_ratio: 0.3}}
+
+  # ===== d70 (encoder_ratio 0.7) x seed{11..20}  (idx 30-39) =====
+  - {tune_method: d70, run_name: d70_s11, seed: 11, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s12, seed: 12, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s13, seed: 13, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s14, seed: 14, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s15, seed: 15, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s16, seed: 16, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s17, seed: 17, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s18, seed: 18, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s19, seed: 19, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s20, seed: 20, overrides: {peft.encoder_ratio: 0.7}}

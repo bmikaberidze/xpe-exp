@@ -181,14 +181,11 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # THE LR/WD RECIPE (paper sec. 4.4 + xpe_utils.py:289-300): two parameter
-    # groups, the same shape for every method. The prompt embeddings train at
-    # 5e-3 with NO weight decay; the prompt-encoder MLP and the classification
-    # head stay on the global 5e-5 / 0.01 below.
-    # SPT's prompt is `self.embedding`; the bare name is correct here (there is
-    # no xpe_embedding at ratio 0). Note the global weight_decay below STAYS
-    # 0.01: paper sec. 4.4 says "the classification head remains under the same
-    # settings as in XPE" -- WD 0 is a property of the PROMPT group, not of SPT.
+    # LR/WD RECIPE: prompt embeddings at 5e-2 with NO weight decay, everything else at
+    # the global 5e-4 / 0.01. Both values are MEASURED, not the paper's 5e-3/5e-5:
+    # Phase A 17a/17b picked the global, Phase B 18a/18b the prompt group (+3.7/+2.2 pts
+    # over a shared lr; plateau 5e-3..1e-1, and 5e-2 keeps the legacy 100x ratio).
+    # Global wd STAYS 0.01 -- wd 0 is a property of the PROMPT group, not of SPT.
     optimizer_grouped_parameters:
     - param_name_parts:
         # '.embedding' (with the dot) matches
@@ -196,7 +193,7 @@ custom_training_args:
         # because matching is a plain substring test. A bare 'embedding' would
         # catch both and silently put DUAL's XPE half on the SPT rate.
         - .embedding
-      lr: 5e-3
+      lr: 5e-2
       weight_decay: 0.0
 
 training_args:
@@ -248,7 +245,7 @@ training_args:
         # branch hard-sets scale_parameter/relative_step to False and never
         # merges optim_args, so they were inert.
         optim: adafactor
-        learning_rate: 5e-5
+        learning_rate: 5e-4
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2
