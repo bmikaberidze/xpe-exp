@@ -6,6 +6,10 @@
 #            ~2.8-pt effects are NOT separable, so 5 is a first pass, not the final n.
 #            EXTEND ADDITIVELY: append seeds 16-20 as indices 20-39 in the same method
 #            order, with a dated comment -- never renumber or edit an existing row.
+#            CLARIFICATION 2026-08-09: seeds 11-15 are the FIRST HALF of one n=10 grid,
+#            not a throwaway pilot. They POOL with 16-20 into a single n=10 result --
+#            nothing run here is discarded or re-run. "First pass" above means the n is
+#            not yet final, NOT that these runs are provisional.
 # SOURCE GROUP is a CLI axis, dispatched one array at a time (never a loop over runs):
 #   enarzho (3) | joshi5 (7) | mgte_seen (76)
 #   => 60 runs per backbone at n=5; 120 once seeds 16-20 land.
@@ -87,3 +91,39 @@ matrix:
   - {tune_method: d70, run_name: d70_s13, seed: 13, overrides: {peft.encoder_ratio: 0.7}}
   - {tune_method: d70, run_name: d70_s14, seed: 14, overrides: {peft.encoder_ratio: 0.7}}
   - {tune_method: d70, run_name: d70_s15, seed: 15, overrides: {peft.encoder_ratio: 0.7}}
+
+  # ===== APPENDED 2026-08-09: seeds 16-20, taking every method to n=10. =====
+  # The n=5 block above (idx 0-19) is UNCHANGED and pools with this one -- nothing
+  # there is re-run or discarded. Reason for extending: at n=5 the observed method
+  # gaps were 0.3-1.75 pp against a seed sd of 1.2-1.4 pp, i.e. the minimum
+  # detectable effect (~2.4 pp) was LARGER than the effect the paper reports
+  # (~2.8 pp at n=10, +/-1.7). n=5 could not have resolved this either way.
+  # Dispatch of this block only:  --array=20-39%10   (same sbatch line otherwise)
+
+  # ===== xpe (encoder_ratio 1) x seed{16..20}  (idx 20-24) =====
+  - {tune_method: xpe, run_name: xpe_s16, seed: 16}
+  - {tune_method: xpe, run_name: xpe_s17, seed: 17}
+  - {tune_method: xpe, run_name: xpe_s18, seed: 18}
+  - {tune_method: xpe, run_name: xpe_s19, seed: 19}
+  - {tune_method: xpe, run_name: xpe_s20, seed: 20}
+
+  # ===== spt (encoder_ratio 0) x seed{16..20}  (idx 25-29) =====
+  - {tune_method: spt, run_name: spt_s16, seed: 16}
+  - {tune_method: spt, run_name: spt_s17, seed: 17}
+  - {tune_method: spt, run_name: spt_s18, seed: 18}
+  - {tune_method: spt, run_name: spt_s19, seed: 19}
+  - {tune_method: spt, run_name: spt_s20, seed: 20}
+
+  # ===== d30 (encoder_ratio 0.3) x seed{16..20}  (idx 30-34) =====
+  - {tune_method: d30, run_name: d30_s16, seed: 16, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s17, seed: 17, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s18, seed: 18, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s19, seed: 19, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s20, seed: 20, overrides: {peft.encoder_ratio: 0.3}}
+
+  # ===== d70 (encoder_ratio 0.7) x seed{16..20}  (idx 35-39) =====
+  - {tune_method: d70, run_name: d70_s16, seed: 16, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s17, seed: 17, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s18, seed: 18, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s19, seed: 19, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s20, seed: 20, overrides: {peft.encoder_ratio: 0.7}}
