@@ -4,7 +4,7 @@ import pytest
 import yaml as pyyaml
 from datasets import Dataset, DatasetDict
 
-from exps.xpe2.src.hub_upload import (
+from src.hub_upload import (
     discover_local_configs,
     prepare_dataset,
     render_yaml_frontmatter,
@@ -165,21 +165,25 @@ def test_parse_args_repo_id_required():
 
 
 def test_render_card_belebele_renders_without_raising():
-    from exps.xpe2.scripts.datasets.upload_bebe_ftp_to_hub import render_card
+    from scripts.datasets.upload_bebe_ftp_to_hub import render_card
     card = render_card(["eng_Latn", "kat_Geor"])
     assert card.startswith("---\n")
     assert "cc-by-sa-4.0" in card
     assert "format_ftp_example" in card
-    assert "Answer: \n```" in card  # trailing space inside fenced format example
+    # 4b9dece switched the FTP prompt to lm-eval-harness's template: fullwidth
+    # U+FF1A and NO trailing space, so the answer letter tokenizes bare.
+    assert "Answer：\n```" in card
+    assert "Answer: " not in card
     assert "<<REPLACE" not in card
 
 
 def test_render_card_xsc_renders_without_raising():
-    from exps.xpe2.scripts.datasets.upload_xsc_ftp_to_hub import render_card
+    from scripts.datasets.upload_xsc_ftp_to_hub import render_card
     card = render_card(["en", "ar"])
     assert card.startswith("---\n")
     assert "cc-by-4.0" in card
     assert "random.sample(ALL_LABELS, 2)" in card
     assert "{A, B, C, D}" in card  # label-sampling callout, single braces
-    assert "Answer: \n```" in card
+    assert "Answer：\n```" in card
+    assert "Answer: " not in card
     assert "<<REPLACE" not in card
