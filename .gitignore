@@ -18,6 +18,10 @@ __pycache__
 artefacts/
 runtime/
 
+# throwaway analysis scripts, probe logs, one-off inspection snippets.
+# NOTHING temporary belongs in the repo root -- put it here.
+.scratch/
+
 dist/
 build/
 *.egg-info/
