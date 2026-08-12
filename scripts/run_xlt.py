@@ -211,13 +211,59 @@ LOW_PERF_LANG_GROUPS = {
         'arb_Latn', 'urd_Latn', 'sin_Latn', 'npi_Latn', 'ben_Latn',
     ],
 
-    # NOTE deliberately no 'mdeberta' / 'mgte' entry. The paper's SIB-200
-    # low-performing group is defined by full fine-tuning of XLM-R-LARGE in the
-    # original benchmark (xpe.pdf sec. 4.2: accuracy < 60%), so it characterises
-    # XLM-R -- and we have not measured the equivalent for either encoder. Until
-    # we do, their tables carry no low-perf row (unify/aggregate degrade
-    # gracefully: low_perf_langs_for() returns an empty set for an unknown llm).
-    # src/sib200_meta.py keeps the XLM-R list as provenance to compare against.
+    # ---------------------------------------------------------------------
+    # TEMPORARY, 2026-08-11 -- BORROWED FROM XLM-R, NOT MEASURED PER BACKBONE.
+    #
+    # Both encoder entries below are copies of the paper's SIB-200
+    # Low-Performing group (src/sib200_meta.py::low_perf_langs()), which
+    # xpe.pdf sec. 4.2 defines by full fine-tuning of *XLM-R-large* in the
+    # original benchmark (accuracy < 60%). It therefore characterises XLM-R,
+    # not mDeBERTa and not mGTE. It is registered here as a stand-in so the
+    # paper's headline row can be computed from runs we already have; it MUST
+    # be replaced by a per-backbone measurement (the planned in-language
+    # full-FT sweep) before the write-up leans on it, and every table built
+    # from it has to say whose measurement defined the group.
+    #
+    # NOT one shared list, despite being one list today: 'mdeberta' and 'mgte'
+    # are deliberately separate keys so replacing one does not silently move
+    # the other. They are ALREADY not identical -- see the mgte note below.
+    # ---------------------------------------------------------------------
+    'mdeberta': [
+        # The full 46. mdeberta_seen == the xlmr column, and the paper's
+        # low-perf list is disjoint from it by construction (verified: the
+        # intersection is empty), so all 46 survive as unseen targets.
+        'ace_Arab', 'aka_Latn', 'arb_Latn', 'ayr_Latn', 'bam_Latn', 'bem_Latn',
+        'bjn_Arab', 'bod_Tibt', 'cjk_Latn', 'ckb_Arab', 'dyu_Latn', 'dzo_Tibt',
+        'ewe_Latn', 'fon_Latn', 'ibo_Latn', 'kab_Latn', 'kam_Latn', 'kbp_Latn',
+        'kik_Latn', 'kin_Latn', 'kmb_Latn', 'knc_Arab', 'lua_Latn', 'lug_Latn',
+        'min_Arab', 'mni_Beng', 'mos_Latn', 'mri_Latn', 'nqo_Nkoo', 'nso_Latn',
+        'nus_Latn', 'run_Latn', 'sat_Olck', 'shn_Mymr', 'smo_Latn', 'sna_Latn',
+        'sot_Latn', 'ssw_Latn', 'taq_Latn', 'taq_Tfng', 'tgk_Cyrl', 'tsn_Latn',
+        'tso_Latn', 'tzm_Tfng', 'umb_Latn', 'yor_Latn',
+    ],
+
+    'mgte': [
+        # The same list MINUS yor_Latn, which is in mGTE's MLM pretraining set
+        # (mgte_seen, 76 codes) while XLM-R-large scored it below 60%. Low-perf
+        # is a STRICT SUBSET OF UNSEEN by definition -- `seen == -1` refines
+        # `seen == 0` -- and add_seen() raises on a lang that is in both, so a
+        # verbatim copy of the 46 would crash unify for the enarzho and joshi5
+        # source groups (for src=mgte_seen, yor_Latn is a source and so was
+        # never a target anyway).
+        #
+        # CONSEQUENCE: the mDeBERTa low-perf row covers 46 languages and the
+        # mGTE one covers 45. The two rows are NOT over the same language set,
+        # so they are not directly comparable across backbones. Say so wherever
+        # they appear side by side.
+        'ace_Arab', 'aka_Latn', 'arb_Latn', 'ayr_Latn', 'bam_Latn', 'bem_Latn',
+        'bjn_Arab', 'bod_Tibt', 'cjk_Latn', 'ckb_Arab', 'dyu_Latn', 'dzo_Tibt',
+        'ewe_Latn', 'fon_Latn', 'ibo_Latn', 'kab_Latn', 'kam_Latn', 'kbp_Latn',
+        'kik_Latn', 'kin_Latn', 'kmb_Latn', 'knc_Arab', 'lua_Latn', 'lug_Latn',
+        'min_Arab', 'mni_Beng', 'mos_Latn', 'mri_Latn', 'nqo_Nkoo', 'nso_Latn',
+        'nus_Latn', 'run_Latn', 'sat_Olck', 'shn_Mymr', 'smo_Latn', 'sna_Latn',
+        'sot_Latn', 'ssw_Latn', 'taq_Latn', 'taq_Tfng', 'tgk_Cyrl', 'tsn_Latn',
+        'tso_Latn', 'tzm_Tfng', 'umb_Latn',   # yor_Latn removed: mGTE-seen
+    ],
 }
 
 

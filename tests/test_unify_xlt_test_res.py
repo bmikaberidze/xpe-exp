@@ -337,8 +337,18 @@ def test_seen_group_mapping_covers_encoder_backbones(llm, group, size):
     assert len(seen_langs_for(llm)) == size
 
 
-@pytest.mark.parametrize('llm', ['mdeberta', 'mgte'])
-def test_encoders_have_no_low_perf_group(llm):
-    # not measured for these backbones -- must degrade to "no low-perf row",
-    # never raise
-    assert low_perf_langs_for(llm) == set()
+@pytest.mark.parametrize('llm,size', [('mdeberta', 46), ('mgte', 45)])
+def test_encoders_carry_the_borrowed_low_perf_group(llm, size):
+    # TEMPORARY (2026-08-11): the paper's XLM-R-large list, minus whatever the
+    # backbone pretrained on, standing in until the per-backbone in-language
+    # full-FT sweep measures the real thing. mGTE is one short -- it pretrained
+    # on yor_Latn, and low-perf must never intersect seen.
+    lp = low_perf_langs_for(llm)
+    assert len(lp) == size
+    assert not (lp & seen_langs_for(llm))
+
+
+def test_unknown_backbone_still_degrades_to_no_low_perf_row():
+    # low_perf_langs_for must never raise on a backbone without a list; the
+    # table simply carries no `seen == -1` row.
+    assert low_perf_langs_for('some_future_backbone') == set()

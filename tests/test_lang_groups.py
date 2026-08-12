@@ -136,9 +136,10 @@ def test_mgte_seen_relation_to_xlmr_seen():
 
 
 def test_low_perf_column_is_provenance_only():
-    # The paper's XLM-R-derived Low-Performing group. It is NOT wired into
-    # LOW_PERF_LANG_GROUPS for the encoders -- that list characterises
-    # XLM-R-large, and the equivalent has not been measured for mDeBERTa or mGTE.
+    # The paper's XLM-R-derived Low-Performing group. Since 2026-08-11 it IS
+    # wired into LOW_PERF_LANG_GROUPS for both encoders, but only as a borrowed
+    # stand-in: the list characterises XLM-R-large, and the equivalent has still
+    # not been measured for mDeBERTa or mGTE. See the two tests below.
     # 46 low-perf + 67 unseen-not-low-perf + 85 seen-wo-joshi5 = 198 = 205 - 7.
     lp = low_perf_langs()
     assert len(lp) == 46
@@ -147,10 +148,37 @@ def test_low_perf_column_is_provenance_only():
     assert len((set(sib200_codes()) - set(xlmr_seen_langs())) - set(lp)) == 67
 
 
-def test_no_low_perf_group_for_the_encoders():
-    from scripts.run_xlt import LOW_PERF_LANG_GROUPS
-    assert 'mdeberta' not in LOW_PERF_LANG_GROUPS
-    assert 'mgte' not in LOW_PERF_LANG_GROUPS
+def test_low_perf_is_never_in_the_seen_set():
+    """The core invariant: low-perf refines UNSEEN.
+
+    `add_seen` encodes low-perf as `seen == -1`, a refinement of `seen == 0`, and
+    raises if a lang is in both lists. Enforce it here for every backbone that
+    has a low-perf group, so a future edit cannot reintroduce the clash.
+    """
+    from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
+
+    for llm, low_perf in LOW_PERF_LANG_GROUPS.items():
+        seen = set(LANG_GROUPS[f'{llm}_seen'])
+        clash = sorted(seen & set(low_perf))
+        assert not clash, f'{llm}: low-perf langs also marked seen: {clash}'
+
+
+def test_encoder_low_perf_groups_are_the_borrowed_xlmr_list():
+    """TEMPORARY: both encoder groups are the paper's XLM-R-large list, minus
+    whatever that backbone actually pretrained on. Replace with a per-backbone
+    measurement (in-language full FT) and this test changes with it."""
+    from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
+
+    truth = set(low_perf_langs())
+    for llm in ('mdeberta', 'mgte'):
+        seen = set(LANG_GROUPS[f'{llm}_seen'])
+        assert set(LOW_PERF_LANG_GROUPS[llm]) == truth - seen
+
+    # mDeBERTa's seen set IS the xlmr column, from which the list was derived,
+    # so nothing is dropped; mGTE pretrained on yor_Latn, so it loses exactly it.
+    assert len(LOW_PERF_LANG_GROUPS['mdeberta']) == 46
+    assert len(LOW_PERF_LANG_GROUPS['mgte']) == 45
+    assert set(LOW_PERF_LANG_GROUPS['mdeberta']) - set(LOW_PERF_LANG_GROUPS['mgte']) == {'yor_Latn'}
 
 
 def test_all_seen_groups_are_sib200_codes():

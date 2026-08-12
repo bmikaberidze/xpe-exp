@@ -47,12 +47,23 @@ both base-size, both on **SIB-200 topic classification**, zero-shot XLT only.
   mDeBERTa is the *bridge row* to the published Table 1: same partition, new code.
   That equality is an assumption, not a documented identical language list — see the
   docstring in `src/sib200_meta.py` before leaning on it in the write-up.
-- **No low-perf group for the encoders.** The paper's Low-Performing set is defined by
-  full fine-tuning of **XLM-R-large** in the original SIB-200 benchmark (< 60%, sec.
-  4.2), so it characterises XLM-R — and the equivalent has not been measured for
-  mDeBERTa or mGTE. Their tables carry no low-perf row until it is.
-  `low_perf_langs()` in `src/sib200_meta.py` keeps the XLM-R list as provenance to
-  compare a future per-backbone measurement against.
+- **The encoders' low-perf group is BORROWED from XLM-R, not measured (2026-08-11).**
+  The paper's Low-Performing set is defined by full fine-tuning of **XLM-R-large** in
+  the original SIB-200 benchmark (< 60%, sec. 4.2), so it characterises XLM-R — and the
+  equivalent has still not been measured for mDeBERTa or mGTE. It is registered in
+  `LOW_PERF_LANG_GROUPS` for both as a stand-in so the paper's headline row can be
+  computed from existing runs; **every table built from it must say whose measurement
+  defined the group**, and it must be replaced by the per-backbone in-language full-FT
+  sweep. `low_perf_langs()` in `src/sib200_meta.py` remains the provenance source.
+  - **Low-perf must never intersect the backbone's seen set** — `add_seen` encodes it as
+    `seen == -1`, a refinement of `seen == 0`, and *raises* on an overlap. So each
+    backbone's list is `low_perf_langs() - {backbone}_seen`: **46 for mDeBERTa** (its
+    seen set IS the `xlmr` column, from which the list was derived, so nothing drops)
+    and **45 for mGTE** (it pretrained on `yor_Latn`). The two rows therefore cover
+    DIFFERENT language sets and are not directly comparable across backbones.
+  - Measured result: XPE−SPT on low-perf is ≈0 (mDeBERTa) / ≈−1.1 (mGTE) against the
+    published **+2.8** — the paper's headline does not reproduce. DUAL-70 does show the
+    paper's *gradient* on mDeBERTa (largest margin on low-perf, smallest on seen).
 - **The legacy repo is the behavioral spec, and its YAML is NOT the whole recipe.**
   `/fscratch/bmikaberidze/XPE` (`nlpka`) produced the published numbers, but
   `nlpka/configs/scripts/xpe_utils.py`'s SLURM-task table **overrides the YAML at
@@ -164,10 +175,22 @@ builds on) — **we maintain it alongside this repo**, it is not a frozen third-
   (e.g. 0.3 or 0.7 — a free hyperparam, NOT tied to the dataset; concat of both).
   So "SPT" is NOT a separate module.
   Consequence: anything gated on `isinstance(pe, CrossPromptEncoder)` fires for SPT too —
-  e.g. the `normalize_embeddings()` clip/unit callback (`training/callbacks.py:151`) DOES
-  clip SPT's `self.embedding` rows (name has `'embedding'`, 2D, `requires_grad`). SPT-clip
-  is a real experiment, not a no-op; it only *looks* identical to SPT-base when the row
-  norms never exceed `max_norm`.
+  e.g. the `normalize_embeddings()` clip/unit callback DOES clip SPT's `self.embedding`
+  rows (name has `'embedding'`, 2D, `requires_grad`), so SPT-clip is a real experiment,
+  not a no-op *once the callback actually runs*.
+- **Normalisation before micm-nlp 0.2.1 NEVER RAN.** `NormalizePromptEncoderEmbeddings`
+  was never registered: `runner.py` read `self._config.task.peft`, but `peft` is a
+  **top-level** block, so the lookup always returned `None`. Fixed in micm-nlp `d3ae7e1`
+  (2026-08-11); registration is now additionally gated on `encoder_embedding_normalize`
+  being set. **Any run before that fix did not normalise, whatever its config said** —
+  in this repo that is the six clip arms of `15a_stab_probe_aya.yml`, which were
+  therefore identical to their base arms (the "clip changes nothing" reading of 15a
+  measured nothing). All bebe/sib tune configs set `encoder_embedding_normalize: null`,
+  so grids 14a/14b/19a/19b are unaffected — no normalisation intended, none applied.
+- **Never read a normalisation claim out of `adapter_config.json`.** It records intent,
+  not effect, and `CrossPromptEncoderConfig`'s default is `'unit'` / max_norm `1.0`
+  while `_filtered_kwargs` (`xpe/factory.py`) strips `None` — so a YAML `null` still
+  writes `"encoder_embedding_normalize": "unit"` into every saved adapter config.
 
 ## Metaconfigs are immutable contracts
 
