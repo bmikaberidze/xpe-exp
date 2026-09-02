@@ -187,10 +187,16 @@ builds on) — **we maintain it alongside this repo**, it is not a frozen third-
   therefore identical to their base arms (the "clip changes nothing" reading of 15a
   measured nothing). All bebe/sib tune configs set `encoder_embedding_normalize: null`,
   so grids 14a/14b/19a/19b are unaffected — no normalisation intended, none applied.
-- **Never read a normalisation claim out of `adapter_config.json`.** It records intent,
-  not effect, and `CrossPromptEncoderConfig`'s default is `'unit'` / max_norm `1.0`
-  while `_filtered_kwargs` (`xpe/factory.py`) strips `None` — so a YAML `null` still
-  writes `"encoder_embedding_normalize": "unit"` into every saved adapter config.
+- **Never read a normalisation claim out of an adapter saved before micm-nlp `9decad2`
+  (2026-08-11).** `CrossPromptEncoderConfig` used to default to `'unit'` / max_norm `1.0`
+  while `_filtered_kwargs` (`xpe/factory.py`) strips `None`, so a YAML `null` never
+  reached the dataclass and every such `adapter_config.json` recorded
+  `"encoder_embedding_normalize": "unit"` regardless of what the run did. **That covers
+  every adapter this repo has produced so far** — grids 14a/14b/19a/19b included.
+  `9decad2` sets both defaults to `None`, so adapters saved from then on record what
+  actually happened; it also makes an unknown mode, and `clip` without a max_norm, raise.
+  Behaviour is unchanged either way — normalisation is driven by the callback, whose
+  registration reads the top-level `peft` block.
 
 ## Metaconfigs are immutable contracts
 
