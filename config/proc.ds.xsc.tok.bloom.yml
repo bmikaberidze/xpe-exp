@@ -20,7 +20,7 @@ ds:
     dirs: mcqa/xstory_cloze_ftp/en
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
-    comes_with_splits: 
+    splits: 
         train: true
         test: false
         validation: true

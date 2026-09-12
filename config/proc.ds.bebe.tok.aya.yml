@@ -20,7 +20,7 @@ ds:
     dirs: mcqa/belebele_ftp/kat_Geor
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
-    comes_with_splits:
+    splits:
         train: false
         test: true
         validation: false

@@ -69,7 +69,7 @@ ds:
     # test role (test: validation) so run_xlt's test phase scores it directly.
     # Mirror of the bebe test config's `validation: test`. (XSC ships only
     # train + validation; there is no native test split.)
-    comes_with_splits:
+    splits:
         train: true
         test: validation
         validation: true

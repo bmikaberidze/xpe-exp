@@ -92,7 +92,7 @@ ds:
     dirs: mcqa/xstory_cloze_ftp/en/tokenized|bigscience|bloom-7b1
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
-    comes_with_splits:
+    splits:
         train: true
         test: false
         validation: true

@@ -3,7 +3,7 @@
 #
 # Both entries are zero-shot (no tune_configs, no adapter): run_xlt tests the
 # eval-config's base model as-is. The eval configs alias the validation split
-# into the test role (comes_with_splits.test: validation), so the normal test
+# into the test role (splits.test: validation), so the normal test
 # phase scores validation data.
 #
 # PAIRING CONSTRAINT: the model comes from --test-config, NOT from the matrix

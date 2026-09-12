@@ -1,0 +1,297 @@
+mode: finetune # preprocess | train | finetune | evaluate | test
+
+# REPRODUCTION TRACK. Unlike the mdeberta/mgte sib configs, whose LRs were
+# MEASURED here (17a/17b/18a/18b), every hyperparameter below is taken from the
+# legacy XLM-R recipe that produced the published Table 1 -- the YAML
+# `nlpka/configs/storage/language_model/xlmr/finetune/peft/sib200_hybrid.xpe.yml`
+# AS OVERRIDDEN AT RUNTIME by `nlpka/configs/scripts/xpe_utils.py` (SLURM slot 4
+# = XPE, plus the `source_training` branch of `update_config`) -- WITH ONE
+# DECLARED EXCEPTION, the xpe_embedding learning rate; see the
+# optimizer_grouped_parameters block below. Reading the YAML
+# alone gives the wrong optimizer, the wrong step budget and the wrong patience.
+# See docs/superpowers/specs/2026-08-16-xlmr-large-table1-reproduction-design.md.
+
+task:
+    id: null
+    category: text_classification
+    name: topic # Topic Detection
+    metric_groups:
+    - metrics:
+        - accuracy
+    preproc_rules:
+        # Token Classification
+        flatten: false
+        filter_padded: false
+        label_id_to_name: false
+        filter_by_prefixes: false
+        # Text To Text
+        decode: false
+        label_name_strip_lower: false
+        label_name_to_float: false
+        label_name_to_id: false
+        # Others
+        verify_labels_match: false
+        calc_confusion_matrix: false
+        prediction_axis: -1
+
+peft:
+    peft_type: XPE
+    task_type: SEQ_CLS
+    # Prompt geometry verbatim from the legacy XLM-R YAML. encoder_hidden_size
+    # 256 = hidden 1024 / 4, the repo ratio (this is where the "xlmr 1024->256"
+    # note in the encoder configs came from).
+    num_virtual_tokens: 20
+    encoder_reparameterization_type: MLP
+    encoder_hidden_size: 256
+    encoder_num_layers: 2
+    encoder_dropout: 0.1   # xpe_utils source branch sets 0.1 (target phase uses 0.0)
+    # XPE: the whole prompt is encoder-produced. Legacy SLURM slot 4.
+    encoder_ratio: 1
+    encoder_input_size: null
+    # xpe_utils' source_training branch explicitly resets this to None; the path
+    # in the legacy YAML is a target-phase leftover.
+    encoder_init_state_dict_path: null
+    # CrossPromptEncoderConfig defaults BOTH of these to true -- leave them false
+    # or the prompt encoder trains nothing.
+    encoder_freeze: false
+    encoder_embedding_freeze: false
+    encoder_embedding_init_type: hf_default # hf_default | xavier_uniform | xavier_normal
+    encoder_embedding_normalize: null # null | unit | clip
+    encoder_embedding_normalize_max_norm: null
+    # NO `pooler` entry here, unlike the mdeberta/mgte configs. VERIFIED in
+    # transformers/models/xlm_roberta/modeling_xlm_roberta.py:1294 --
+    # XLMRobertaForSequenceClassification builds its backbone with
+    # `add_pooling_layer=False` and puts the whole head in `classifier`
+    # (XLMRobertaClassificationHead = dense + out_proj, line 1562). PEFT
+    # auto-saves classifier/score, so nothing is left random-and-frozen. This is
+    # exactly why the published runs never hit the mDeBERTa pooler bug.
+    # The prompt-encoder entries must still be listed: __post_init__ only
+    # auto-fills this list when it is null.
+    modules_to_save:
+    - xpe_embedding
+    - xpe_head
+
+model:
+    architecture: xlmr
+    pretrained:
+        cls: AutoModelForSequenceClassification
+        args:
+        # 560M params; hidden 1024, 24 layers, 16 heads, vocab 250002,
+        # max_position_embeddings 514. The paper's backbone (xpe.pdf sec. 4.1).
+        name: FacebookAI/xlm-roberta-large
+        source: huggingface # null | local | huggingface
+        checkpoint: null
+        adapter: null
+
+tokenizer:
+    source: huggingface # local | huggingface
+    name: FacebookAI/xlm-roberta-large
+    type: null # null | wordpiece | sentpiece
+    algorithm: null
+    adapt_to_lm: false
+
+ds:
+    descriptive_name: null
+    category: benchmarks # benchmarks | corpora | collections | raw
+    # `eng_Latn` is the literal default; run_xlt swaps segment index 2 per
+    # source/target language. SIB-200 has no folds -- never pass --fold.
+    dirs: topic/sib200/eng_Latn/tokenized|FacebookAI|xlm-roberta-large
+    name: null
+    type: huggingface_saved # text | csv | huggingface_saved | huggingface
+    splits:
+        train: true
+        test: true
+        validation: true
+    input:
+        key: inputs
+        standardize_key: false
+    label:
+        key: labels
+        standardize_key: false
+        number: 7   # -> num_labels, injected by MODEL._task_derived_kwargs
+        names:
+        - science/technology
+        - travel
+        - politics
+        - sports
+        - health
+        - entertainment
+        - geography
+    # run_xlt injects this column itself (the source/target LANGUAGE index); the
+    # dataset carries `index_id` instead. Declaring the key here is the template.
+    task_id:
+        key: task_ids
+        standardize_key: false
+    preproc_rules: null
+
+eval:
+    before_training: false
+    before_training_on_test: false
+    during_training: null
+    after_training: false
+    after_training_on_test: true
+    per_task: null
+    downstream_tasks: false
+
+test:
+    run: false
+    zero_shot: false
+    zero_shot_only: false
+    save_predictions: false
+    report_to_wandb: true
+
+trainer:
+    cls: Trainer # Trainer | Seq2SeqTrainer
+
+data_collator:
+    cls: DataCollatorWithPadding
+    args:
+        # `max_length` would be inert under padding='longest'; the real 164 cap is
+        # applied at tokenization time (proc.ds.sib.tok.xlmr.yml). Legacy YAML
+        # used `padding: true`, which is 'longest'.
+        padding: 'longest' # true or longest | max_length | false
+        pad_to_multiple_of: 4
+        return_tensors: pt
+
+custom_training_args:
+    # Sampling
+    train_force_sequential: false
+    eval_force_sequential: true
+    test_force_sequential: true
+    # Early Stopping -- patience 20 is the SOURCE-phase value that xpe_utils'
+    # source_training branch writes; the legacy YAML's 30 is the target phase.
+    early_stopping_after: 0.5
+    early_stopping_patience: 20
+    early_stopping_threshold: 0.0
+    # DECLARED DEVIATION: the published runs stopped on eval_loss (the legacy
+    # callback hardcoded it). We stop on accuracy instead, consistent with
+    # load_best_model_at_end and with the 15a probe finding that eval-loss
+    # explosion is cosmetic under prompt tuning. Same deviation as 14a/14b/19a/19b,
+    # so all four tracks stay mutually comparable.
+    early_stopping_metric: metric_for_best_model
+    # Final Model Saving
+    save_final_model: true
+    keep_only_final_model: true
+    # Random Task Exclusion
+    random_task_exclusion: false
+    # Do not remove in _remove_unused_columns
+    usable_columns:
+    - task_ids
+    # ===================================================================
+    # THE ONE DECLARED DEVIATION FROM THE PUBLISHED RECIPE.
+    #
+    # This group is a NO-OP: lr/wd equal the global 5e-5 / 0.01 below, i.e. XPE's
+    # prompt embedding trains at the same rate as its MLP and the head. That
+    # follows xpe.pdf sec. 4.4 -- "For XPE, we use a learning rate of 5e-5 ...
+    # for both the prompt encoder and the classification head" -- and it matches
+    # the STRUCTURE 19a/19b used on mDeBERTa/mGTE, where this group is likewise a
+    # no-op at that backbone's global rate.
+    #
+    # CAREFUL, this is NOT a single-variable comparison against 19a/19b, and an
+    # earlier version of this comment wrongly said it was. Three other things
+    # differ, all because 19a/19b were TUNED for base-size encoders while this
+    # track reproduces a published recipe:
+    #     global lr             5e-5  here vs 5e-4  in 19a/19b
+    #     SPT prompt-group lr   5e-3  here vs 5e-2  in 19a/19b
+    #     encoder_hidden_size   256   here vs 192   in 19a/19b (= hidden/4 either way)
+    # Tokenization IS identical (max_length 164 in all three proc configs). What
+    # transfers is the qualitative claim -- in both tracks XPE's prompt embedding
+    # sits at its own global rate rather than 100x it -- not a controlled contrast.
+    #
+    # It is NOT what produced the published numbers. xpe_utils slot 4 carries
+    # spec_lr 0.005 / spec_wd 0.0, and because the reparam type is MLP it writes
+    # `param_name_parts = ['xpe_embedding']` -- so in the real published runs
+    # xpe_embedding sat at 100x the global LR with no weight decay. (Sec. 4.4 is
+    # accurate only for `xpe_head`, which the legacy group does not match.)
+    #
+    # RISK, recorded: if this track also returns a null, the result cannot
+    # distinguish "XPE does not work" from "the prompt LR was wrong". The fix is
+    # a second arm at lr 5e-3 / wd 0.0, APPENDED to metaconfig 21a as new array
+    # indices -- never an edit to an entry that has already been dispatched.
+    #
+    # The group must stay present even as a no-op: an absent key cannot be
+    # overridden by a metaconfig.
+    # ===================================================================
+    optimizer_grouped_parameters:
+    - param_name_parts: [xpe_embedding]   # substring match; disjoint from SPT's '.embedding'
+      lr: 5e-5
+      weight_decay: 0.01
+
+training_args:
+    cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
+    args:
+        # Training length -- max_steps OVERRIDES num_train_epochs in HF, so the
+        # legacy YAML's 10 epochs was dead in every published run. 24000 comes
+        # from xpe_utils slot 4 (conf[9]; all four slots carry it) and xpe.pdf sec. 4.4 ("a hard limit of
+        # 24,000 optimization steps for source").
+        num_train_epochs: 10
+        max_steps: 24000
+
+        # Batch Size
+        per_device_train_batch_size: 32
+        gradient_accumulation_steps: 1
+        per_device_eval_batch_size: 256
+        eval_accumulation_steps: 1
+
+        # Logging
+        logging_strategy: steps # steps
+        logging_first_step: false
+        logging_steps: 50
+        report_to: wandb # wandb | none
+
+        # Evaluation
+        eval_strategy: epoch
+        eval_steps: null
+
+        # Saving
+        save_strategy: epoch # no / steps / epoch / best
+        save_steps: null
+        save_total_limit: 1
+        save_safetensors: true
+        overwrite_output_dir: true
+        push_to_hub: false
+
+        # Loading Best Model
+        load_best_model_at_end: true
+        metric_for_best_model: accuracy
+        greater_is_better: true
+
+        # Optimizer -- Adafactor, xpe_utils slot 4 conf[8] (all four slots) and sec. 4.4.
+        # Do NOT port the legacy optim_args (relative_step/warmup_init/
+        # scale_parameter): VERIFIED inert -- transformers/trainer.py:1416 takes
+        # the OptimizerNames.ADAFACTOR branch and hard-sets
+        # {"scale_parameter": False, "relative_step": False}, and optim_args is
+        # merged only inside the GaLore/target-modules branch (line 1384), which
+        # this path never enters. So `learning_rate` below WAS honored.
+        optim: adafactor
+        # 5e-5 = the legacy global (xpe_utils conf[7]). NOT the 5e-4 that 17a/17b
+        # measured for the base-size encoders -- this track reproduces, it does
+        # not re-tune.
+        learning_rate: 5e-5
+        lr_scheduler_type: cosine_with_restarts
+        lr_scheduler_kwargs:
+            num_cycles: 2
+        warmup_ratio: 0.1
+        # 0.01, from the legacy YAML AND xpe_utils' source_training branch.
+        # xpe.pdf sec. 4.4 says 0.1; the code that produced the numbers says
+        # 0.01, and the code wins.
+        weight_decay: 0.01
+        max_grad_norm: 1.0
+
+        # Grouping
+        group_by_length: true
+        length_column_name: length
+
+        # Others
+        full_determinism: false
+        # bf16, as in the legacy YAML. XLM-R has no DeBERTa-style fp16 bug, but
+        # fp16 on a large encoder is an overflow risk for no gain -- keep bf16.
+        bf16: true
+        fp16: false
+
+cuda:
+    empty_cache_steps: null
+
+env:
+    PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True'
+    TOKENIZERS_PARALLELISM: 'true'

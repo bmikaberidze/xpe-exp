@@ -1,0 +1,310 @@
+# XLM-R-large SIB-200 zero-shot XLT -- REPRODUCTION of the published Table 1.
+# 70 cells: idx 0-39 = 4 methods x 10 seeds (11-20) at the paper LR arm, idx 40-69
+# = xpe/d30/d70 x 10 seeds at the LEGACY LR arm (appended 2026-08-16). NO fold axis
+# (SIB-200 ships official 701/99/204 splits) -- never pass --fold, `apply_fold` raises.
+#
+# Spec: docs/superpowers/specs/2026-08-16-xlmr-large-table1-reproduction-design.md
+#
+# WHY THIS TRACK. Grids 19a/19b returned a null: all four methods within ~1 pt on
+# every target group, and XPE-SPT on low-perf came out +0.21 / -0.30 / -0.19
+# (enarzho / joshi5 / seen) against the paper's +2.8. Two explanations survive --
+# the BACKBONE (mDeBERTa and mGTE simply do not respond to prompt tuning) or the
+# PIPELINE (our port of the method is wrong). Running the paper's own backbone
+# separates them, and nothing else does.
+#
+# WHY JOSHI5 FIRST. xpe.pdf Table 1 (p.6), low-perf targets, XPE minus SPT:
+#     EnArZho  35.3 - 35.2 = +0.1     <- the paper itself reports ~nothing here
+#     Joshi5   39.1 - 36.0 = +3.1     <- LARGEST published effect
+#     Seen-92  41.9 - 39.1 = +2.8
+# Our mDeBERTa enarzho cell was +0.21, i.e. we ALREADY AGREE with the paper at 3
+# source languages. The disagreement lives only at Joshi5 and Seen-92, so a cheap
+# 3-source control would prove nothing. Joshi5 is the decisive cell and the runs
+# are step-limited (max_steps 24000 + early stopping), so it costs the same as
+# Seen-92 despite 13x fewer training rows.
+#
+# HYPERPARAMETERS ARE THE LEGACY RECIPE, NOT MEASURED HERE -- the opposite of
+# 19a/19b. They live in the tune configs; this file overrides only encoder_ratio.
+# Recovered from nlpka/configs/scripts/xpe_utils.py (SLURM slots 1-4 + the
+# `source_training` branch of update_config), which OVERRIDES the legacy YAML at
+# runtime, so the YAML alone is not the recipe:
+#   global lr / wd  5e-5 / 0.01   (sec. 4.4 says wd 0.1; the code says 0.01, and
+#                                  the code is what produced the numbers)
+#   spt prompt      5e-3 / wd 0   (100x the global; paper and code agree here)
+#   xpe prompt      = global      <- SEE THE DEVIATION BELOW
+#   optim           adafactor, cosine_with_restarts x2, warmup 0.1, bs 32
+#   max_steps       24000, early-stopping patience 20, 20 virtual tokens,
+#                   encoder_hidden_size 256 (= hidden 1024 / 4), 2 layers, dropout 0.1
+#   max_length      164 at tokenization (proc.ds.sib.tok.xlmr.yml) -- the legacy
+#                   collator value. This track reproduces the published truncation
+#                   rather than fixing it; a 512 sweep is a separate ablation.
+#
+# !! ONE DECLARED DEVIATION: the xpe_embedding LR.
+# The published runs put XPE's and BOTH DUALs' `xpe_embedding` at spec_lr 0.005 /
+# spec_wd 0.0 -- 100x the global -- because slots 2/3/4 use reparam MLP and
+# xpe_utils then writes `param_name_parts = ['xpe_embedding']`. (xpe.pdf sec. 4.4
+# claims 5e-5 "for both the prompt encoder and the classification head"; that is
+# accurate only for `xpe_head`.) We run at the GLOBAL 5e-5 instead, which is the
+# same STRUCTURE 19a/19b used (that group a no-op at the backbone's global rate).
+#   CORRECTION 2026-08-16 (comment only, no matrix change): this originally said
+#   the grid "changes exactly one variable against them: the backbone". That is
+#   FALSE -- 19a/19b were tuned for base-size encoders, so global lr (5e-5 vs
+#   5e-4), SPT prompt lr (5e-3 vs 5e-2) and encoder_hidden_size (256 vs 192) all
+#   differ too. Tokenization is identical (164 everywhere). What carries across
+#   is the qualitative XPE-prompt-LR structure, not a controlled contrast.
+# RISK: if this also returns a null, it cannot distinguish "XPE does not
+# work" from "the prompt LR was wrong". The remedy is a second arm at 5e-3 / wd 0,
+# APPENDED here as idx 40-69 (done 2026-08-16) -- never an edit to a dispatched row.
+#
+# SOURCE GROUP is a CLI axis, dispatched one array at a time (never a loop over
+# runs): enarzho (3) | joshi5 (7) | xlmr_seen (92) => 120 runs for the full table.
+# NOTE for the xlmr_seen dispatch: the legacy `sib200_xlmr_seen` benchmark
+# evaluates UNSEEN targets only, which is why Table 1's `Seen /wo J5` and
+# `All /wo J5` cells are blank in that row. Do not report those cells there.
+#
+# `xlmr_seen` IS the paper's Seen-92 by definition (XLM-R is the backbone the
+# column describes), and LOW_PERF_LANG_GROUPS['xlmr'] is the full 46 as MEASURED
+# by full fine-tuning of XLM-R-large (xpe.pdf sec. 4.2). Unlike every mdeberta/mgte
+# table, rows built from this grid need no "whose measurement defined the group"
+# footnote.
+#
+# Selection on VALIDATION accuracy (declared deviation, carried from 14a/19a: the
+# published runs stopped on eval_loss). Test phase RUNS (no --skip-test).
+#
+# XLM-R-large has no torch.jit.script path, so the mDeBERTa B200 exclusion does
+# NOT apply and no partition pin is needed. 560M params -> --mem=64G.
+#
+# DISPATCH. FIRST the smoke run -- idx 0 AND idx 10, i.e. one seed of each method
+# in the first dispatch (spt_s11 + xpe_s11):
+#   sbatch --array=0,10 --mem=64G \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m scripts.run_xlt_meta \
+#           --meta-config ./config/meta/21a_xlmr_repro_table1.yml \
+#           --test-config ./config/test.lm.xlmr.ds.sib.yml \
+#           --source-group joshi5"
+# BOTH are needed because the paper's parameter figure is an XPE figure: xpe.pdf
+# says trainable params stay "less than 0.3% (1.6M) of the model parameters", and
+# idx 0 is SPT, which is much smaller.
+#   CORRECTION 2026-08-16 (comment only, no matrix change): that sentence is in
+#   sec. 4.3 "Methods Compared", not sec. 4.1 as first written here -- and it is
+#   stated in the fully-supervised baseline comparison, though the parameter
+#   budget is the same one this zero-shot grid uses.
+# Expected, at hidden 1024 / num_labels 7 /
+# encoder_hidden_size 256 / 2 layers / 20 virtual tokens, with classifier =
+# 1024*1024 + 1024 + 1024*7 + 7 = 1,056,775:
+#   idx 0  spt : embedding 20*1024 = 20,480      + classifier  => ~1.08M  (0.19%)
+#   idx 10 xpe : xpe_embedding 20,480
+#                + xpe_head (1024->256->256->1024, with biases) 591,360
+#                + classifier                                   => ~1.67M  (0.30%)
+# The XPE number landing on 1.6M / 0.30% is the hard external check that
+# encoder_hidden_size, encoder_num_layers and num_virtual_tokens match the
+# published model. Also confirm in both logs: no `pooler` in the module list,
+# max_steps 24000, optim adafactor, lr 5e-5, and no NaN in the first losses (bf16).
+# THEN the rest of the first dispatch:   --array=1-9,11-19%10   (spt + xpe, n=10)
+# THEN, only if that reproduces:         --array=20-39%10       (d30 + d70)
+# THEN the other source groups, ONE AT A TIME, each confirmed landed first.
+#
+# STATUS 2026-08-16. idx 0-19 COMPLETE on joshi5, n=10 -- SPT reproduces to
+# within 0.2 pts on every target group and XPE-SPT on low-perf is +2.03 (paired
+# 95% CI +/-1.34, excludes 0) against the paper's +3.1. See the APPENDED block at
+# the bottom for the full table and for why idx 40-69 (the legacy LR arm) exists.
+# idx 20-69 dispatched together as --array=20-69%10.
+#
+# Aggregate: unify_xlt_test_res.py per group dir, then aggregate_xlt_res.py.
+
+# !! METHOD ORDER DIFFERS FROM 19a. Here it is spt, xpe, d30, d70 (spt first, so
+# the SPT+XPE pair the +3.1 claim is about is the contiguous head of the array);
+# 19a is xpe, spt, d30, d70. Array indices are positional, so REUSING A 19a ARRAY
+# RANGE HERE SELECTS A DIFFERENT METHOD. Always read the block headers below.
+
+tune_configs:
+  spt: ./config/tune.spt.lm.xlmr.ds.sib.yml
+  xpe: ./config/tune.xpe.lm.xlmr.ds.sib.yml
+  d30: ./config/tune.dual.lm.xlmr.ds.sib.yml
+  d70: ./config/tune.dual.lm.xlmr.ds.sib.yml
+
+matrix:
+
+  # ===== spt (encoder_ratio 0) x seed{11..20}  (idx 0-9) =====
+  # idx 0 is the smoke run -- dispatch it alone and clear the gate above first.
+  - {tune_method: spt, run_name: spt_s11, seed: 11}
+  - {tune_method: spt, run_name: spt_s12, seed: 12}
+  - {tune_method: spt, run_name: spt_s13, seed: 13}
+  - {tune_method: spt, run_name: spt_s14, seed: 14}
+  - {tune_method: spt, run_name: spt_s15, seed: 15}
+  - {tune_method: spt, run_name: spt_s16, seed: 16}
+  - {tune_method: spt, run_name: spt_s17, seed: 17}
+  - {tune_method: spt, run_name: spt_s18, seed: 18}
+  - {tune_method: spt, run_name: spt_s19, seed: 19}
+  - {tune_method: spt, run_name: spt_s20, seed: 20}
+
+  # ===== xpe (encoder_ratio 1) x seed{11..20}  (idx 10-19) =====
+  - {tune_method: xpe, run_name: xpe_s11, seed: 11}
+  - {tune_method: xpe, run_name: xpe_s12, seed: 12}
+  - {tune_method: xpe, run_name: xpe_s13, seed: 13}
+  - {tune_method: xpe, run_name: xpe_s14, seed: 14}
+  - {tune_method: xpe, run_name: xpe_s15, seed: 15}
+  - {tune_method: xpe, run_name: xpe_s16, seed: 16}
+  - {tune_method: xpe, run_name: xpe_s17, seed: 17}
+  - {tune_method: xpe, run_name: xpe_s18, seed: 18}
+  - {tune_method: xpe, run_name: xpe_s19, seed: 19}
+  - {tune_method: xpe, run_name: xpe_s20, seed: 20}
+
+  # idx 0-19 above are the FIRST DISPATCH: SPT and XPE at n=10, which is the pair
+  # the +3.1 claim is about. The two DUAL arms below are written now so the full
+  # Table 1 is a pure array-range extension of this same file (metaconfigs are
+  # immutable contracts -- additive only, and array indices are positional).
+
+  # ===== d30 (encoder_ratio 0.3) x seed{11..20}  (idx 20-29) =====
+  - {tune_method: d30, run_name: d30_s11, seed: 11, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s12, seed: 12, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s13, seed: 13, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s14, seed: 14, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s15, seed: 15, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s16, seed: 16, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s17, seed: 17, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s18, seed: 18, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s19, seed: 19, overrides: {peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s20, seed: 20, overrides: {peft.encoder_ratio: 0.3}}
+
+  # ===== d70 (encoder_ratio 0.7) x seed{11..20}  (idx 30-39) =====
+  - {tune_method: d70, run_name: d70_s11, seed: 11, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s12, seed: 12, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s13, seed: 13, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s14, seed: 14, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s15, seed: 15, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s16, seed: 16, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s17, seed: 17, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s18, seed: 18, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s19, seed: 19, overrides: {peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s20, seed: 20, overrides: {peft.encoder_ratio: 0.7}}
+
+  # ==========================================================================
+  # APPENDED 2026-08-16: the LEGACY LR ARM, idx 40-69. Nothing above is edited,
+  # re-run or discarded -- idx 0-19 are COMPLETE (joshi5, n=10) and idx 20-39
+  # keep the paper-prose arm. This block adds the arm the header's RISK note
+  # pre-planned, and it is now motivated by evidence rather than caution.
+  #
+  # WHY. Result of idx 0-19 (joshi5, n=10, paired 95% CI on the per-seed diff):
+  #     group          SPT / paper      XPE / paper      XPE-SPT / paper
+  #     LowPerf.      35.8 / 36.0      37.9 / 39.1      +2.03 +/-1.34 / +3.1
+  #     Unseen        56.0 / 56.0      56.5 / 57.2      +0.50 +/-0.98 / +1.2
+  #     Seen /wo J5   85.8 / 85.6      84.9 / 84.5      -0.85 +/-1.06 / -1.1
+  #     All /wo J5    68.8 / 68.7      68.7 / 69.0      -0.08 +/-0.84 / +0.3
+  # SPT -- whose 5e-3 carve-out we KEPT -- reproduces to within 0.2 pts on every
+  # group. XPE -- whose carve-out we REMOVED -- sits ~1 pt low on low-perf and
+  # unseen. The one method we changed is the one that is off. (The shortfall is
+  # NOT statistically significant: our +2.03 CI [0.69, 3.37] contains the paper's
+  # +3.1. So this arm tests a plausible explanation, it does not chase a proven
+  # discrepancy.)
+  #
+  # WHAT THE ARM IS: `xpe_embedding` at spec_lr 5e-3 / spec_wd 0.0, i.e. exactly
+  # what xpe_utils.py slots 2/3/4 write. For DUAL that ALSO means moving the SPT
+  # half BACK to the global, because legacy writes only ONE group -- so d30/d70
+  # here are the TRUE legacy configuration, and d30/d70 at idx 20-39 are the
+  # paper-prose mirror of it. Running both is what settles that question.
+  #
+  # NO spt ARM: SPT's group is already at the legacy 5e-3 / 0.0 in idx 0-9, so a
+  # legacy SPT arm would be a bit-identical re-run. Its 10 seeds serve as the
+  # shared baseline for BOTH arms.
+  #
+  # Dispatch of this block:  --array=40-69%10   (same sbatch line otherwise)
+  # ==========================================================================
+
+  # ===== xpe_leg: xpe_embedding @ 5e-3 / wd 0 x seed{11..20}  (idx 40-49) =====
+  # xpe config group 0 IS xpe_embedding, so only group 0 moves.
+  - {tune_method: xpe, run_name: xpeleg_s11, seed: 11, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeleg_s12, seed: 12, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeleg_s13, seed: 13, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeleg_s14, seed: 14, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeleg_s15, seed: 15, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeleg_s16, seed: 16, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeleg_s17, seed: 17, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeleg_s18, seed: 18, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeleg_s19, seed: 19, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeleg_s20, seed: 20, overrides: {custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+
+  # ===== d30_leg (idx 50-59) =====
+  # dual config group 0 = `.embedding` (SPT half) -> BACK to the global 5e-5/0.01,
+  # group 1 = `xpe_embedding` -> up to 5e-3/0.0. Together: the true legacy slot 2.
+  - {tune_method: d30, run_name: d30leg_s11, seed: 11, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30leg_s12, seed: 12, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30leg_s13, seed: 13, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30leg_s14, seed: 14, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30leg_s15, seed: 15, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30leg_s16, seed: 16, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30leg_s17, seed: 17, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30leg_s18, seed: 18, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30leg_s19, seed: 19, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30leg_s20, seed: 20, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+
+  # ===== d70_leg (idx 60-69) =====
+  - {tune_method: d70, run_name: d70leg_s11, seed: 11, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70leg_s12, seed: 12, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70leg_s13, seed: 13, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70leg_s14, seed: 14, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70leg_s15, seed: 15, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70leg_s16, seed: 16, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70leg_s17, seed: 17, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70leg_s18, seed: 18, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70leg_s19, seed: 19, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70leg_s20, seed: 20, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-5, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.01, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+
+  # ==========================================================================
+  # APPENDED 2026-08-17: DUAL config "C" -- BOTH prompt halves carved to
+  # 5e-3 / wd 0. idx 70-89. Nothing above is edited or re-run.
+  #
+  # WHY. joshi5 n=10 is complete for idx 0-69 and XPE reproduces essentially
+  # exactly at the legacy arm (xpeleg low-perf 38.9 vs paper 39.1; XPE-SPT +3.07
+  # vs paper +3.1; all four target groups within 0.2 pts). DUAL does NOT:
+  #     LowPerf.   d30 37.7 / d30leg 35.3   vs paper 36.8
+  #                d70 36.8 / d70leg 36.9   vs paper 37.3
+  # and the paper's DUAL-70 Seen win (86.6, +1.0 over SPT) appears in NEITHER arm
+  # (we get 85.8, +0.06). d30 vs d30leg differ by 2.4 pts, so DUAL is extremely
+  # sensitive to WHICH half gets the 100x rate -- which makes the untried
+  # combination worth one block of runs.
+  #
+  # THE FOUR POSSIBLE DUAL CONFIGS ( `embedding` = SPT half, `xpe_embedding` ):
+  #     A  5e-3  / global   -> idx 20-39 (d30, d70)     paper-prose reading
+  #     B  global/ 5e-3     -> idx 50-69 (d30leg, d70leg)  TRUE legacy code
+  #     C  5e-3  / 5e-3     -> THIS BLOCK
+  #     D  global/ global   -> not planned
+  # C is what a BARE `param_name_parts: ['embedding']` matcher produces, since
+  # plain substring matching catches `xpe_embedding` too. It is also a live
+  # reading of xpe.pdf sec. 4.4's "the DUAL configuration reflects the same
+  # settings applied to its respective components". B is what xpe_utils.py
+  # actually executes (reparam MLP -> the one group is `['xpe_embedding']`, so
+  # `embedding` fell through to the global) -- but B is also the NOISIEST arm we
+  # have (d30leg sd 2.5 vs d30 sd 0.7), which is itself a hint it is not what
+  # produced the published DUAL row.
+  #
+  # Group 0 (`.embedding`) is ALREADY 5e-3 / 0.0 in the dual tune config, so only
+  # group 1 is overridden here.
+  #
+  # Dispatch:  --array=70-89%10 --source-group joshi5
+  # NOTE the enarzho / xlmr_seen arrays were submitted as 0-69 and do NOT include
+  # this block; extend them only if C wins on joshi5.
+  # ==========================================================================
+
+  # ===== d30c: both halves @ 5e-3 / wd 0 x seed{11..20}  (idx 70-79) =====
+  - {tune_method: d30, run_name: d30c_s11, seed: 11, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30c_s12, seed: 12, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30c_s13, seed: 13, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30c_s14, seed: 14, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30c_s15, seed: 15, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30c_s16, seed: 16, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30c_s17, seed: 17, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30c_s18, seed: 18, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30c_s19, seed: 19, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d30, run_name: d30c_s20, seed: 20, overrides: {peft.encoder_ratio: 0.3, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+
+  # ===== d70c: both halves @ 5e-3 / wd 0 x seed{11..20}  (idx 80-89) =====
+  - {tune_method: d70, run_name: d70c_s11, seed: 11, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70c_s12, seed: 12, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70c_s13, seed: 13, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70c_s14, seed: 14, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70c_s15, seed: 15, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70c_s16, seed: 16, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70c_s17, seed: 17, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70c_s18, seed: 18, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70c_s19, seed: 19, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}
+  - {tune_method: d70, run_name: d70c_s20, seed: 20, overrides: {peft.encoder_ratio: 0.7, custom_training_args.optimizer_grouped_parameters.1.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.1.weight_decay: 0.0}}

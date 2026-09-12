@@ -28,14 +28,13 @@ peft:
     task_type: null
 
 model:
-    architecture: mdeberta
+    architecture: xlmr
     pretrained:
         cls: AutoModelForSequenceClassification
         args:
-        # 86M backbone + 190M embeddings = 278.8M total; hidden 768, 12 layers,
-        # 12 heads, vocab 251000, max_position_embeddings 512. Base only --
-        # there is no mdeberta-v3-large.
-        name: microsoft/mdeberta-v3-base
+        # 560M params; hidden 1024, 24 layers, 16 heads, vocab 250002,
+        # max_position_embeddings 514. The paper's backbone (xpe.pdf sec. 4.1).
+        name: FacebookAI/xlm-roberta-large
         source: huggingface # null | local | huggingface
         checkpoint: null
         # run_xlt.wire_test_to_adapter fills this in from the tune phase.
@@ -43,7 +42,7 @@ model:
 
 tokenizer:
     source: huggingface # local | huggingface
-    name: microsoft/mdeberta-v3-base
+    name: FacebookAI/xlm-roberta-large
     type: null # null | wordpiece | sentpiece
     algorithm: null
     adapt_to_lm: false
@@ -53,7 +52,7 @@ ds:
     category: benchmarks # benchmarks | corpora | collections | raw
     # `eng_Latn` is the literal default; run_xlt swaps segment index 2 per
     # source/target language. SIB-200 has no folds -- never pass --fold.
-    dirs: topic/sib200/eng_Latn/tokenized|microsoft|mdeberta-v3-base
+    dirs: topic/sib200/eng_Latn/tokenized|FacebookAI|xlm-roberta-large
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     splits:
@@ -105,7 +104,7 @@ data_collator:
     cls: DataCollatorWithPadding
     args:
         # `max_length` would be inert under padding='longest'; the real 164 cap is
-        # applied at tokenization time (proc.ds.sib.tok.mdeberta.yml).
+        # applied at tokenization time (proc.ds.sib.tok.xlmr.yml).
         padding: 'longest' # true or longest | max_length | false
         pad_to_multiple_of: 4
         return_tensors: pt
@@ -157,10 +156,8 @@ training_args:
 
         # Others
         full_determinism: false
-        # fp16 is documented as broken for mDeBERTa (microsoft/DeBERTa#77: zero
-        # training loss / NaN validation). bf16 is not, and its exponent range
-        # matches fp32 -- but watch the first logged losses for nan; the fallback
-        # is fp32 (bf16: false), never fp16.
+        # bf16, as in the legacy XLM-R YAML. XLM-R has no DeBERTa-style fp16
+        # bug, but fp16 on a large encoder is an overflow risk for no gain.
         bf16: true
         fp16: false
 

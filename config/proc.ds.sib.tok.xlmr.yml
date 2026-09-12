@@ -7,10 +7,7 @@ task:
 
 tokenizer:
     source: huggingface # local | huggingface
-    # mGTE reuses XLM-R's vocabulary and its tokenizer_config.json declares
-    # `tokenizer_class: XLMRobertaTokenizer` with no `auto_map`, so unlike the
-    # MODEL (a custom `NewModel`) the tokenizer needs no trust_remote_code.
-    name: Alibaba-NLP/gte-multilingual-mlm-base
+    name: FacebookAI/xlm-roberta-large
     type: null # null | wordpiece | sentpiece
     algorithm: null
     adapt_to_lm: false
@@ -51,9 +48,11 @@ ds:
                 keep_target_texts_for_save: true
                 text_to_text_rules: false
             rules:
-                # 164 is the legacy XPE SIB-200 length. SIB sentences are short,
-                # so this truncates essentially nothing while keeping batch
-                # geometry identical to the published runs.
+                # 164 verbatim from the legacy XLM-R SIB-200 collator
+                # (nlpka .../xlmr/finetune/peft/sib200_hybrid.xpe.yml). This is
+                # the REPRODUCTION track, so the published truncation is part of
+                # what is being reproduced -- do NOT raise it to 512 here. A 512
+                # sweep is a separate ablation with its own proc config.
                 max_length: 164
                 padding: false # max_length | true (longest) | false (do_not_pad)
                 truncation: true

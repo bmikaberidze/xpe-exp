@@ -63,7 +63,7 @@ ds:
     dirs: mcqa/belebele_ftp/eng_Latn/fold0/tokenized|bigscience|bloom-7b1
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
-    comes_with_splits:
+    splits:
         train: false
         test: true
         validation: test

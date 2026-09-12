@@ -92,7 +92,7 @@ ds:
     dirs: topic/sib200/eng_Latn/tokenized|microsoft|mdeberta-v3-base
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
-    comes_with_splits:
+    splits:
         train: true
         test: true
         validation: true

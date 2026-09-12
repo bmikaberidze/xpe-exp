@@ -1,0 +1,92 @@
+# EVAL_LOSS EARLY STOPPING -- does the published stopping signal close the XPE gap?
+# 30 cells = 3 arms x 10 seeds (11-20). Source group is the CLI axis; joshi5 first.
+#
+# WHY. Test 21c evaluated the PUBLISHED Table 1 adapters through our pipeline and
+# they reproduced the paper to +/-0.07 on every cell, so our EVAL, data, splits and
+# target groups are exact. Against that fixed reference:
+#     joshi5 LowPerf   published 39.10   ourA 37.87 (-1.23)   ourC 38.91 (-0.19)
+#     joshi5 LowPerf   published SPT 36.00   our SPT 35.84 (-0.16)
+# i.e. our SPT training is faithful and our XPE training is not. SPT's match could
+# still be coincidence, so this grid re-runs SPT under the changed setting too --
+# if SPT moves, the "SPT is faithful" reading was luck.
+#
+# WHAT CHANGES. custom_training_args.early_stopping_metric:
+#     'metric_for_best_model'  (our default) -> stop on ACCURACY
+#     'eval_loss'              (this grid)   -> stop on EVAL LOSS, as the legacy
+#                                               callback hardcoded
+# NOTE the scope is narrower than it looks: CustomEarlyStoppingCallback keeps
+# stopping DECOUPLED from selection, and load_best_model_at_end +
+# metric_for_best_model: accuracy are unchanged, so the best-ACCURACY checkpoint is
+# still the one loaded. Only the stopping TIME moves. Under prompt tuning eval_loss
+# explodes early (15a), so this should stop sooner and truncate training -- which is
+# exactly the mechanism that could cost or gain the ~1.2 pts.
+#
+# ARMS (all with early_stopping_metric: eval_loss):
+#   spt_el   ratio 0   -- SPT's own prompt group stays 5e-3/wd0 (as in 21a)
+#   xpeA_el  ratio 1   -- xpe_embedding at the GLOBAL 5e-5/0.01  = arm A, the
+#                         configuration the weight forensics PROVED the paper ran
+#   xpeC_el  ratio 1   -- xpe_embedding at 5e-3/wd0 = arm C, which fits the paper
+#                         better despite not being what ran
+#
+# READING IT (compare against 21a's same-arm numbers, joshi5 n=10):
+#   xpeA_el ~= 39.1  -> stopping signal WAS the missing piece; arm A + eval_loss is
+#                       the faithful recipe and 21a's accuracy-stopping was the bug.
+#   xpeA_el ~= 37.9  -> stopping is NOT the cause; the defect is inside our XPE
+#                       module port (init / dropout / prompt->MLP wiring) and that
+#                       is where to look next.
+#   spt_el  moves    -> our SPT match in 21a was coincidence, and the whole
+#                       "SPT faithful / XPE broken" split has to be re-examined.
+#
+# XLM-R needs no partition pin (no torch.jit.script); 560M -> --mem=64G.
+# Dispatch:
+#   sbatch --array=0-29%10 --mem=64G \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m scripts.run_xlt_meta \
+#           --meta-config ./config/meta/21d_eval_loss_stopping.yml \
+#           --test-config ./config/test.lm.xlmr.ds.sib.yml \
+#           --source-group joshi5"
+#
+# Aggregate: unify_xlt_test_res.py on the run-group dir, then compare per arm
+# against artefacts/_scratch/21a_arms/ and against the 21c published reference.
+
+tune_configs:
+  spt: ./config/tune.spt.lm.xlmr.ds.sib.yml
+  xpe: ./config/tune.xpe.lm.xlmr.ds.sib.yml
+
+matrix:
+
+  # ===== spt_el: SPT + eval_loss stopping (prompt group unchanged, 5e-3/wd0)  (idx 0-9) =====
+  - {tune_method: spt, run_name: spt_el_s11, seed: 11, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: spt, run_name: spt_el_s12, seed: 12, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: spt, run_name: spt_el_s13, seed: 13, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: spt, run_name: spt_el_s14, seed: 14, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: spt, run_name: spt_el_s15, seed: 15, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: spt, run_name: spt_el_s16, seed: 16, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: spt, run_name: spt_el_s17, seed: 17, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: spt, run_name: spt_el_s18, seed: 18, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: spt, run_name: spt_el_s19, seed: 19, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: spt, run_name: spt_el_s20, seed: 20, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+
+  # ===== xpeA_el: arm A + eval_loss: xpe_embedding at the GLOBAL rate (what the paper ran)  (idx 10-19) =====
+  - {tune_method: xpe, run_name: xpeA_el_s11, seed: 11, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: xpe, run_name: xpeA_el_s12, seed: 12, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: xpe, run_name: xpeA_el_s13, seed: 13, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: xpe, run_name: xpeA_el_s14, seed: 14, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: xpe, run_name: xpeA_el_s15, seed: 15, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: xpe, run_name: xpeA_el_s16, seed: 16, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: xpe, run_name: xpeA_el_s17, seed: 17, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: xpe, run_name: xpeA_el_s18, seed: 18, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: xpe, run_name: xpeA_el_s19, seed: 19, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+  - {tune_method: xpe, run_name: xpeA_el_s20, seed: 20, overrides: {custom_training_args.early_stopping_metric: eval_loss}}
+
+  # ===== xpeC_el: arm C + eval_loss: xpe_embedding carved to 5e-3/wd0  (idx 20-29) =====
+  - {tune_method: xpe, run_name: xpeC_el_s11, seed: 11, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeC_el_s12, seed: 12, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeC_el_s13, seed: 13, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeC_el_s14, seed: 14, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeC_el_s15, seed: 15, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeC_el_s16, seed: 16, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeC_el_s17, seed: 17, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeC_el_s18, seed: 18, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeC_el_s19, seed: 19, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}
+  - {tune_method: xpe, run_name: xpeC_el_s20, seed: 20, overrides: {custom_training_args.early_stopping_metric: eval_loss, custom_training_args.optimizer_grouped_parameters.0.lr: 5e-3, custom_training_args.optimizer_grouped_parameters.0.weight_decay: 0.0}}

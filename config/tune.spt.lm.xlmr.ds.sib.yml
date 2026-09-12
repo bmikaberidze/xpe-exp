@@ -1,5 +1,14 @@
 mode: finetune # preprocess | train | finetune | evaluate | test
 
+# REPRODUCTION TRACK. Unlike the mdeberta/mgte sib configs, whose LRs were
+# MEASURED here (17a/17b/18a/18b), every hyperparameter below is taken from the
+# legacy XLM-R recipe that produced the published Table 1 -- the YAML
+# `nlpka/configs/storage/language_model/xlmr/finetune/peft/sib200_hybrid.xpe.yml`
+# AS OVERRIDDEN AT RUNTIME by `nlpka/configs/scripts/xpe_utils.py` (SLURM slot 1
+# = SPT, plus the `source_training` branch of `update_config`). Reading the YAML
+# alone gives the wrong optimizer, the wrong step budget and the wrong patience.
+# See docs/superpowers/specs/2026-08-16-xlmr-large-table1-reproduction-design.md.
+
 task:
     id: null
     category: text_classification
@@ -26,19 +35,19 @@ task:
 peft:
     peft_type: XPE
     task_type: SEQ_CLS
-    # Legacy XPE SIB-200 prompt geometry (nlpka sib200_hybrid.xpe.yml), kept
-    # verbatim so the encoder rows stay comparable to the published table.
+    # Prompt geometry verbatim from the legacy XLM-R YAML. encoder_hidden_size
+    # 256 = hidden 1024 / 4, the repo ratio (this is where the "xlmr 1024->256"
+    # note in the encoder configs came from).
     num_virtual_tokens: 20
-    encoder_reparameterization_type: MLP
-    encoder_hidden_size: 192   # hidden/4, the repo ratio (xlmr 1024->256, decoders 4096->1024)
+    encoder_reparameterization_type: NONE
+    encoder_hidden_size: 256
     encoder_num_layers: 2
-    encoder_dropout: 0.1
-    # XPE: the whole prompt is encoder-produced.
-    encoder_ratio: 1
+    encoder_dropout: 0.1   # xpe_utils source branch sets 0.1 (target phase uses 0.0)
+    # SPT: no encoder -- a plain soft prompt trained directly. Legacy SLURM slot 1.
+    encoder_ratio: 0
     encoder_input_size: null
-    # null is correct for the source (zero-shot) phase. The legacy YAML carried a
-    # path here, but that was a target-phase leftover that xpe_utils.py reset to
-    # None for source training.
+    # xpe_utils' source_training branch explicitly resets this to None; the path
+    # in the legacy YAML is a target-phase leftover.
     encoder_init_state_dict_path: null
     # CrossPromptEncoderConfig defaults BOTH of these to true -- leave them false
     # or the prompt encoder trains nothing.
@@ -47,36 +56,33 @@ peft:
     encoder_embedding_init_type: hf_default # hf_default | xavier_uniform | xavier_normal
     encoder_embedding_normalize: null # null | unit | clip
     encoder_embedding_normalize_max_norm: null
-    # PEFT auto-saves only modules named classifier/score and freezes every other
-    # child. On DebertaV2ForSequenceClassification the head is split across TWO
-    # children -- `pooler` (768x768 dense + tanh) and `classifier` -- and BOTH are
-    # randomly initialised (absent from the checkpoint). Without `pooler` here it
-    # stays random AND frozen. XLM-R has no pooler (its whole head lives inside
-    # `classifier`), which is why the published runs never hit this.
-    # The prompt-encoder entries must be listed too: __post_init__ only auto-fills
-    # this list when it is null, so naming `pooler` alone would drop them and the
-    # adapter would stop saving its own weights. PEFT appends classifier/score.
+    # NO `pooler` entry here, unlike the mdeberta/mgte configs. VERIFIED in
+    # transformers/models/xlm_roberta/modeling_xlm_roberta.py:1294 --
+    # XLMRobertaForSequenceClassification builds its backbone with
+    # `add_pooling_layer=False` and puts the whole head in `classifier`
+    # (XLMRobertaClassificationHead = dense + out_proj, line 1562). PEFT
+    # auto-saves classifier/score, so nothing is left random-and-frozen. This is
+    # exactly why the published runs never hit the mDeBERTa pooler bug.
+    # The prompt entry must still be listed: __post_init__ only auto-fills this
+    # list when it is null. At ratio 0 the prompt lives in `embedding`.
     modules_to_save:
-    - xpe_embedding
-    - xpe_head
-    - pooler
+    - embedding
 
 model:
-    architecture: mdeberta
+    architecture: xlmr
     pretrained:
         cls: AutoModelForSequenceClassification
         args:
-        # 86M backbone + 190M embeddings = 278.8M total; hidden 768, 12 layers,
-        # 12 heads, vocab 251000, max_position_embeddings 512. Base only --
-        # there is no mdeberta-v3-large.
-        name: microsoft/mdeberta-v3-base
+        # 560M params; hidden 1024, 24 layers, 16 heads, vocab 250002,
+        # max_position_embeddings 514. The paper's backbone (xpe.pdf sec. 4.1).
+        name: FacebookAI/xlm-roberta-large
         source: huggingface # null | local | huggingface
         checkpoint: null
         adapter: null
 
 tokenizer:
     source: huggingface # local | huggingface
-    name: microsoft/mdeberta-v3-base
+    name: FacebookAI/xlm-roberta-large
     type: null # null | wordpiece | sentpiece
     algorithm: null
     adapt_to_lm: false
@@ -86,7 +92,7 @@ ds:
     category: benchmarks # benchmarks | corpora | collections | raw
     # `eng_Latn` is the literal default; run_xlt swaps segment index 2 per
     # source/target language. SIB-200 has no folds -- never pass --fold.
-    dirs: topic/sib200/eng_Latn/tokenized|microsoft|mdeberta-v3-base
+    dirs: topic/sib200/eng_Latn/tokenized|FacebookAI|xlm-roberta-large
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     splits:
@@ -138,7 +144,8 @@ data_collator:
     cls: DataCollatorWithPadding
     args:
         # `max_length` would be inert under padding='longest'; the real 164 cap is
-        # applied at tokenization time (proc.ds.sib.tok.mdeberta.yml).
+        # applied at tokenization time (proc.ds.sib.tok.xlmr.yml). Legacy YAML
+        # used `padding: true`, which is 'longest'.
         padding: 'longest' # true or longest | max_length | false
         pad_to_multiple_of: 4
         return_tensors: pt
@@ -148,15 +155,16 @@ custom_training_args:
     train_force_sequential: false
     eval_force_sequential: true
     test_force_sequential: true
-    # Early Stopping -- patience 20 is the SOURCE-phase value (paper sec. 4.4);
-    # the legacy YAML's 30 belongs to the target phase, which is out of scope.
+    # Early Stopping -- patience 20 is the SOURCE-phase value that xpe_utils'
+    # source_training branch writes; the legacy YAML's 30 is the target phase.
     early_stopping_after: 0.5
     early_stopping_patience: 20
     early_stopping_threshold: 0.0
     # DECLARED DEVIATION: the published runs stopped on eval_loss (the legacy
     # callback hardcoded it). We stop on accuracy instead, consistent with
     # load_best_model_at_end and with the 15a probe finding that eval-loss
-    # explosion is cosmetic under prompt tuning.
+    # explosion is cosmetic under prompt tuning. Same deviation as 14a/14b/19a/19b,
+    # so all four tracks stay mutually comparable.
     early_stopping_metric: metric_for_best_model
     # Final Model Saving
     save_final_model: true
@@ -166,23 +174,27 @@ custom_training_args:
     # Do not remove in _remove_unused_columns
     usable_columns:
     - task_ids
-    # ONE LR for everything XPE trains (xpe.pdf sec. 4.4). The group below is a
-    # NO-OP -- lr/wd MUST equal the global below; it exists only so a metaconfig
-    # can override the xpe_embedding lr (an absent key cannot be overridden).
+    # LR/WD RECIPE -- legacy, NOT measured here. xpe_utils slot 1 carries
+    # spec_lr 0.005 / spec_wd 0.0, and because the reparam type is NONE it writes
+    # `param_name_parts = ['embedding']`. We use '.embedding' (with the dot)
+    # instead: at ratio 0 there is no xpe_embedding, so the two are equivalent,
+    # and the dotted form keeps this file consistent with the DUAL config where
+    # a bare 'embedding' WOULD wrongly catch the XPE half.
+    # The 100x prompt/global ratio is the one point where xpe.pdf sec. 4.4 and
+    # the legacy code agree.
     optimizer_grouped_parameters:
-    - param_name_parts: [xpe_embedding]   # substring match; disjoint from SPT's '.embedding'
-      lr: 5e-4
-      weight_decay: 0.01
+    - param_name_parts:
+        - .embedding
+      lr: 5e-3
+      weight_decay: 0.0
 
 training_args:
     cls: TrainingArguments # TrainingArguments | Seq2SeqTrainingArguments
     args:
-        # Training length -- max_steps OVERRIDES num_train_epochs in HF. The
-        # legacy YAML's 10 epochs was dead in every published run; the real
-        # budget came from xpe_utils.py slot 9 and paper sec. 4.4 ("a hard limit
-        # of 24,000 optimization steps for source"). At bs 32 on SIB-200's 701
-        # rows/lang, 10 epochs would be 660 steps for a 3-lang source group -- a
-        # 36x undertrain in exactly the rows where SPT and XPE swap places.
+        # Training length -- max_steps OVERRIDES num_train_epochs in HF, so the
+        # legacy YAML's 10 epochs was dead in every published run. 24000 comes
+        # from xpe_utils slot 1 (conf[9]) and xpe.pdf sec. 4.4 ("a hard limit of
+        # 24,000 optimization steps for source").
         num_train_epochs: 10
         max_steps: 24000
 
@@ -215,21 +227,25 @@ training_args:
         metric_for_best_model: accuracy
         greater_is_better: true
 
-        # Optimizer -- Adafactor, from xpe_utils.py slot 8 and paper sec. 4.4
-        # ("Optimization is performed using Adafactor with a fixed learning rate
-        # and a cosine schedule with restarts (2 cycles)"). The legacy config
-        # file has no `optim:` key at all, which is why reading it alone reads as
-        # AdamW. Do NOT port the legacy optim_args: the transformers ADAFACTOR
-        # branch hard-sets scale_parameter/relative_step to False and never
-        # merges optim_args, so they were inert.
+        # Optimizer -- Adafactor, xpe_utils slot 1 conf[8] and xpe.pdf sec. 4.4.
+        # Do NOT port the legacy optim_args (relative_step/warmup_init/
+        # scale_parameter): VERIFIED inert -- transformers/trainer.py:1416 takes
+        # the OptimizerNames.ADAFACTOR branch and hard-sets
+        # {"scale_parameter": False, "relative_step": False}, and optim_args is
+        # merged only inside the GaLore/target-modules branch (line 1384), which
+        # this path never enters. So `learning_rate` below WAS honored.
         optim: adafactor
-        # 5e-4 (not the paper's 5e-5): Phase A 17a/17b, both backbones. Phase B 18a/18b
-        # found no gain from a separate xpe_embedding lr, so the group above tracks this.
-        learning_rate: 5e-4
+        # 5e-5 = the legacy global (xpe_utils conf[7]). NOT the 5e-4 that 17a/17b
+        # measured for the base-size encoders -- this track reproduces, it does
+        # not re-tune.
+        learning_rate: 5e-5
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2
         warmup_ratio: 0.1
+        # 0.01, from the legacy YAML AND xpe_utils' source_training branch.
+        # xpe.pdf sec. 4.4 says 0.1; the code that produced the numbers says
+        # 0.01, and the code wins.
         weight_decay: 0.01
         max_grad_norm: 1.0
 
@@ -239,10 +255,8 @@ training_args:
 
         # Others
         full_determinism: false
-        # fp16 is documented as broken for mDeBERTa (microsoft/DeBERTa#77: zero
-        # training loss / NaN validation). bf16 is not, and its exponent range
-        # matches fp32 -- but watch the first logged losses for nan; the fallback
-        # is fp32 (bf16: false), never fp16.
+        # bf16, as in the legacy YAML. XLM-R has no DeBERTa-style fp16 bug, but
+        # fp16 on a large encoder is an overflow risk for no gain -- keep bf16.
         bf16: true
         fp16: false
 

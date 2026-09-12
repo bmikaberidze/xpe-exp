@@ -102,7 +102,7 @@ ds:
     dirs: topic/sib200/eng_Latn/tokenized|Alibaba-NLP|gte-multilingual-mlm-base
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
-    comes_with_splits:
+    splits:
         train: true
         test: true
         validation: true

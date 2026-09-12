@@ -21,6 +21,7 @@ if __name__ == '__main__':
 
     # Run Pipline
     from micm_nlp.pipeline import run
-    # 
-    model, test_output = run(config)
+    #
+    output = run(config)
+    print(f'Run written to {output.dir}')
 

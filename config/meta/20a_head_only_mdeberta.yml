@@ -1,0 +1,89 @@
+# HEAD-ONLY CONTROL, mDeBERTa-v3-base -- the missing baseline under grid 19a.
+#
+# THE QUESTION. Grid 19a returned four methods that agree to within ~1 pt on every
+# target group (XPE-SPT is +0.21/-0.30/-0.19 on low-perf against the paper's +2.8).
+# Before hunting for a bug that hides an effect, establish whether there is an effect
+# to hide: the classification head is 63-97% of the trainable parameters in every
+# method, so if the head alone reaches the same accuracy, then grid 19a measured the
+# HEAD, not the prompt, and the flat method ordering is the expected result rather
+# than a defect.
+#
+# THE ARM. One arm, `head`: the SPT config (encoder_ratio 0) with the prompt encoder
+# FROZEN AT INITIALISATION --
+#     peft.encoder_freeze: true
+#     peft.encoder_embedding_freeze: true
+# so the 20 virtual tokens are still prepended, still random, and never learn; only
+# `pooler` + `classifier` train. Architecture, sequence length and parameter layout
+# are therefore IDENTICAL to the SPT rows of 19a, and the single difference is
+# whether the prompt is learned. That isolates the prompt's contribution; a
+# no-virtual-token baseline would confound it with a change of input length.
+#
+# WHY THIS IS NOT REDUNDANT WITH THE 19a PROMPT ABLATION. That check swapped a random
+# never-loaded prompt into a model whose head had been trained ALONGSIDE a learned
+# prompt (deu_Latn 0.87 -> 0.25). That is a mismatch, and it proves only that the head
+# depends on the prompt it was trained with. Here the head is trained WITH the frozen
+# random prompt from step 0, so it can adapt to it -- the honest control.
+#
+# READING IT.
+#   head ~= spt/xpe/d30/d70  ->  the prompt contributes ~nothing on this backbone.
+#                               The 19a null is a real finding, not a bug, and the
+#                               write-up says so. Stop bug-hunting the pipeline.
+#   head <<  the four        ->  the prompt IS doing work and the methods genuinely
+#                               tie. Then the next suspect is the LR asymmetry (XPE's
+#                               prompt sits at 1x the head's LR while SPT's is at
+#                               100x, and its saved rows barely move from init).
+#
+# FREEZING IS LOAD-BEARING, SO VERIFY IT. `set_grad_requirements()` freezes by NAME
+# (`'embedding' in name`, `'xpe_head' in name`) and runs AFTER PeftModel construction
+# (xpe/factory.py:52), so it wins over PEFT's own grad flags. Both flags DEFAULT to
+# true in CrossPromptEncoderConfig -- the tune configs set them false, and this file
+# overrides them back. Dispatch idx 0 ALONE first and confirm in the log that the
+# prompt parameters are absent from the trainable set and that pooler+classifier are
+# present, before spending the other 19 runs.
+#
+# HYPERPARAMETERS are inherited unchanged from tune.spt.lm.mdeberta.ds.sib.yml, i.e.
+# exactly the 19a operating point (head/global lr 5e-4, max_steps 24000, patience 20,
+# selection on validation accuracy). The SPT prompt-LR carve-out (5e-2/wd 0) is still
+# in that config but is INERT here: it targets `embedding`, which no longer trains.
+#
+# SEEDS 11-20 match 19a one-for-one, so `head` pools into the same n=10 comparison.
+#
+# SOURCE GROUP is a CLI axis -- 10 seeds x 2 groups = 20 runs:
+#   enarzho (3 langs, the hardest regime) and mdeberta_seen (92, the deployment one).
+#   joshi5 is deliberately omitted; add it only if the two disagree.
+#
+# !! mDeBERTa CANNOT RUN ON B200 (DeBERTa-v2 jit.scripts build_relative_position and
+# this container's NVRTC does not know sm_100). The DEFAULT partition INCLUDES B200,
+# so the pin below is REQUIRED.
+#
+# Dispatch ONE group at a time, each confirmed landed before the next. FIRST the
+# single verification run:
+#   sbatch --array=0 --mem=64G \
+#     --partition=H100,H100-PCI,H100-Trails,H200,H200-PCI,A100-80GB \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m scripts.run_xlt_meta \
+#           --meta-config ./config/meta/20a_head_only_mdeberta.yml \
+#           --test-config ./config/test.lm.mdeberta.ds.sib.yml \
+#           --source-group enarzho"
+# then, once the freeze is confirmed in its log:  --array=1-9%10   (rest of enarzho)
+# then:                                           --array=0-9%10 --source-group mdeberta_seen
+#
+# Aggregate: unify_xlt_test_res.py on this run_group's dir, then compare against
+# 19a's test_unified.csv for the same source group.
+
+tune_configs:
+  head: ./config/tune.spt.lm.mdeberta.ds.sib.yml
+
+matrix:
+
+  # ===== head-only (prompt frozen at init) x seed{11..20}  (idx 0-9) =====
+  - {tune_method: head, run_name: head_s11, seed: 11, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}
+  - {tune_method: head, run_name: head_s12, seed: 12, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}
+  - {tune_method: head, run_name: head_s13, seed: 13, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}
+  - {tune_method: head, run_name: head_s14, seed: 14, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}
+  - {tune_method: head, run_name: head_s15, seed: 15, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}
+  - {tune_method: head, run_name: head_s16, seed: 16, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}
+  - {tune_method: head, run_name: head_s17, seed: 17, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}
+  - {tune_method: head, run_name: head_s18, seed: 18, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}
+  - {tune_method: head, run_name: head_s19, seed: 19, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}
+  - {tune_method: head, run_name: head_s20, seed: 20, overrides: {peft.encoder_freeze: true, peft.encoder_embedding_freeze: true}}

@@ -1,0 +1,119 @@
+# SIB-200 zero-shot XLT, xlm-roberta-xl -- ARM A.
+# 40 cells = 4 methods x 10 seeds (11-20). NO fold axis -- never pass --fold.
+# ONE METACONFIG = ONE AGGREGATE TABLE (see CLAUDE.md): backbone and arm are split
+# into separate files precisely so unify + aggregate produce a clean 4-column table.
+#
+# WHY THIS TRACK. Grids 19a/19b and 23a/23b established that XPE's low-perf advantage
+# is ABSENT on mDeBERTa-base (278M) and mGTE-base (277M) under BOTH prompt-LR regimes,
+# while grid 21a reproduced it on XLM-R-large (558M) and 21c validated our pipeline
+# against the PUBLISHED adapters (+/-0.07 on all 12 cells). But backbone and SIZE are
+# CONFOUNDED in that comparison: the two nulls are base-size, the reproduction is
+# large. This grid breaks the confound by walking the XLM-R size ladder with
+# architecture, tokenizer and pretraining corpus all held fixed:
+#     xlm-roberta-base   277M   <- matches mDeBERTa 278M / mGTE 277M
+#     xlm-roberta-large  558M   <- the reproduction (grid 21a)
+#     xlm-roberta-xl    3473M
+# If the effect vanishes at BASE, the encoder null is a SCALE result and needs no
+# backbone story at all. If it survives at base, it is genuinely backbone-specific and
+# the next step is a different ~560M encoder (infoxlm-large / rembert, both verified
+# available). mdeberta-v3-large does NOT exist, so mDeBERTa cannot be scaled in-family.
+#
+# ARM A: xpe_embedding at the GLOBAL 5e-5/0.01 (no carve-out) -- what the paper ran.
+#   Arm A is the configuration the WEIGHT FORENSICS PROVED the paper ran (published XPE
+#   prompt_std 0.9970 vs our arm A 0.9974, distance 0.0004; the carved arm is 0.0758
+#   away). Arm C carves both prompt halves to 100x the global. On XLM-R-large the two
+#   are NOT statistically separable (Welch vs the published adapters: p=0.264 arm A,
+#   p=0.811 arm C) -- both reproduce. Running both here keeps the size comparison
+#   honest rather than betting on one recipe.
+#
+# NO NEW CONFIGS OR PREPROCESSING WERE NEEDED:
+#   - tune/test configs are the existing xlmr ones; the backbone is swapped per entry
+#     via `model.pretrained.name` + `tokenizer.name` overrides.
+#   - `peft.encoder_hidden_size` follows the repo's hidden/4 rule: 640 for xlm-roberta-xl.
+#   - The tokenized SIB-200 data under `tokenized|FacebookAI|xlm-roberta-large` is
+#     VALID FOR ALL THREE SIZES: base, large and XL share a byte-identical tokenizer
+#     (md5 a530638f6673270f, 250002 tokens). XL's config advertises vocab_size 250880,
+#     but that is tensor-core PADDING, not a different vocabulary. Verified, not assumed.
+#   - `xlmr_seen` (92) and LOW_PERF_LANG_GROUPS['xlmr'] (46) apply unchanged -- all
+#     three sizes pretrain on CC100's 100 languages -- so `architecture: xlmr` stays,
+#     the registry lookups stay correct, and run_group separates the aggregates.
+#   - No pooler on either model (xlm-roberta-xl head = roberta + classifier(dense,out_proj)),
+#     so modules_to_save needs no pooler entry. Verified by instantiating the config.
+#
+# HYPERPARAMETERS are the paper recipe, unchanged from 21a: global lr 5e-5 / wd 0.01,
+# SPT prompt 5e-3 / wd 0, adafactor, cosine_with_restarts x2, warmup 0.1, bs 32,
+# max_steps 24000, patience 20, 20 virtual tokens, max_length 164, accuracy selection.
+# DECLARED: the LRs are NOT re-tuned per size. That is deliberate -- re-tuning would
+# reintroduce the confound this grid exists to remove -- but it means a null at base
+# could in principle be a mis-tuned-LR null. Read it with that caveat.
+#
+# XLM-R-XL is 3.5B -- pin the >80GB partitions. XLM-R has no torch.jit.script path,
+# so B200 is safe here (empirically confirmed: an XLM-R run completed on serv-3324).
+#
+# Dispatch ONE source group at a time, each confirmed landed before the next:
+#   sbatch --array=0-39%10 --mem=96G --partition=B200,H200,H200-PCI,H100-PCI,H100-Trails \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m scripts.run_xlt_meta \
+#           --meta-config ./config/meta/24c_xlmr_xl_armA.yml \
+#           --test-config ./config/test.lm.xlmrxl.ds.sib.yml \
+#           --source-group joshi5"      # then xlmr_seen, then enarzho
+#
+# Aggregate: unify_xlt_test_res.py per source-group dir, then aggregate_xlt_res.py
+# with --out (all xlmr sizes share llm='xlmr', so the default aggr_res.csv path would
+# collide across grids).
+
+tune_configs:
+  spt: ./config/tune.spt.lm.xlmr.ds.sib.yml
+  xpe: ./config/tune.xpe.lm.xlmr.ds.sib.yml
+  d30: ./config/tune.dual.lm.xlmr.ds.sib.yml
+  d70: ./config/tune.dual.lm.xlmr.ds.sib.yml
+
+matrix:
+
+  # ===== spt (idx 0-9) =====
+  - {tune_method: spt, run_name: spt_s11, seed: 11, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: spt, run_name: spt_s12, seed: 12, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: spt, run_name: spt_s13, seed: 13, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: spt, run_name: spt_s14, seed: 14, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: spt, run_name: spt_s15, seed: 15, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: spt, run_name: spt_s16, seed: 16, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: spt, run_name: spt_s17, seed: 17, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: spt, run_name: spt_s18, seed: 18, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: spt, run_name: spt_s19, seed: 19, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: spt, run_name: spt_s20, seed: 20, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+
+  # ===== xpe (idx 10-19) =====
+  - {tune_method: xpe, run_name: xpe_s11, seed: 11, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: xpe, run_name: xpe_s12, seed: 12, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: xpe, run_name: xpe_s13, seed: 13, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: xpe, run_name: xpe_s14, seed: 14, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: xpe, run_name: xpe_s15, seed: 15, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: xpe, run_name: xpe_s16, seed: 16, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: xpe, run_name: xpe_s17, seed: 17, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: xpe, run_name: xpe_s18, seed: 18, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: xpe, run_name: xpe_s19, seed: 19, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+  - {tune_method: xpe, run_name: xpe_s20, seed: 20, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640}}
+
+  # ===== d30 (idx 20-29) =====
+  - {tune_method: d30, run_name: d30_s11, seed: 11, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s12, seed: 12, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s13, seed: 13, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s14, seed: 14, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s15, seed: 15, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s16, seed: 16, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s17, seed: 17, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s18, seed: 18, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s19, seed: 19, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+  - {tune_method: d30, run_name: d30_s20, seed: 20, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.3}}
+
+  # ===== d70 (idx 30-39) =====
+  - {tune_method: d70, run_name: d70_s11, seed: 11, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s12, seed: 12, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s13, seed: 13, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s14, seed: 14, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s15, seed: 15, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s16, seed: 16, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s17, seed: 17, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s18, seed: 18, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s19, seed: 19, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
+  - {tune_method: d70, run_name: d70_s20, seed: 20, overrides: {model.pretrained.name: facebook/xlm-roberta-xl, tokenizer.name: facebook/xlm-roberta-xl, peft.encoder_hidden_size: 640, peft.encoder_ratio: 0.7}}
