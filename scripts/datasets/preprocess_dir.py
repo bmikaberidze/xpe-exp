@@ -21,6 +21,7 @@ proc.ds.bebe.tok.aya.yml
 proc.ds.bebe.tok.bloom.yml
 proc.ds.sib.tok.mdeberta.yml
 proc.ds.sib.tok.mgte.yml
+proc.ds.sib.tok.xlmr.yml
 
 Usage (never on the login node -- see CLAUDE.md "Run environment"):
 sbatch --array=0 --mem=30G --wait \

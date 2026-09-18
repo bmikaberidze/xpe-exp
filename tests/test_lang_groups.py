@@ -102,7 +102,8 @@ def test_label_names_are_canonical_order():
 
 # LANG_GROUPS is the single runtime source of truth for source languages; these
 # tests only pin its literals against the metadata table so the two can't drift.
-@pytest.mark.parametrize('group,size', [('mdeberta_seen', 92), ('mgte_seen', 76)])
+@pytest.mark.parametrize('group,size', [('mdeberta_seen', 92), ('mgte_seen', 76),
+                                        ('xlmr_seen', 92)])
 def test_encoder_seen_groups_are_well_formed(group, size):
     langs = LANG_GROUPS[group]
     assert len(langs) == size
@@ -121,6 +122,30 @@ def test_mdeberta_seen_reproduces_paper_seen_92():
     # assumption caveat in src/sib200_meta.py's docstring.
     assert set(LANG_GROUPS['mdeberta_seen']) == set(xlmr_seen_langs())
     assert len(xlmr_seen_langs()) == 92
+
+
+def test_xlmr_seen_is_the_paper_seen_92_by_definition():
+    # XLM-R-large is the paper's own backbone, so this group IS the `xlmr`
+    # column's subject -- no CC100 inference in the chain, unlike mdeberta_seen.
+    assert set(LANG_GROUPS['xlmr_seen']) == set(xlmr_seen_langs())
+    # Same literal as mdeberta_seen today, but kept as two keys on purpose: if
+    # the mDeBERTa==XLM-R assumption is ever revised, only that group moves.
+    assert LANG_GROUPS['xlmr_seen'] == LANG_GROUPS['mdeberta_seen']
+
+
+def test_xlmr_low_perf_is_the_full_46_and_not_borrowed():
+    """The one low-perf group that is a measurement of its own backbone.
+
+    xpe.pdf sec. 4.2 defines low-perf by full FT of XLM-R-large (<60%), so for
+    'xlmr' the list is the definition. Nothing drops: it was derived from the
+    same `xlmr` column that defines xlmr_seen, hence disjoint by construction."""
+    from scripts.run_xlt import LOW_PERF_LANG_GROUPS
+
+    assert set(LOW_PERF_LANG_GROUPS['xlmr']) == set(low_perf_langs())
+    assert len(LOW_PERF_LANG_GROUPS['xlmr']) == 46
+    # identical to the borrowed mDeBERTa copy -- there it is a stand-in, here the
+    # real thing; the equality is what makes 19a/21a rows comparable.
+    assert set(LOW_PERF_LANG_GROUPS['xlmr']) == set(LOW_PERF_LANG_GROUPS['mdeberta'])
 
 
 def test_mgte_seen_relation_to_xlmr_seen():
@@ -183,7 +208,7 @@ def test_encoder_low_perf_groups_are_the_borrowed_xlmr_list():
 
 def test_all_seen_groups_are_sib200_codes():
     codes = set(sib200_codes())
-    for group in ('mdeberta_seen', 'mgte_seen', 'joshi5', 'enarzho'):
+    for group in ('mdeberta_seen', 'mgte_seen', 'xlmr_seen', 'joshi5', 'enarzho'):
         assert set(LANG_GROUPS[group]) <= codes, group
 
 

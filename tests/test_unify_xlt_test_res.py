@@ -348,6 +348,32 @@ def test_encoders_carry_the_borrowed_low_perf_group(llm, size):
     assert not (lp & seen_langs_for(llm))
 
 
+def test_llm_seen_group_covers_every_backbone():
+    """A backbone must not be half-wired: low-perf registered, seen missing.
+
+    `low_perf_langs_for` degrades to an empty set on an unknown llm, but
+    `seen_langs_for` RAISES -- so a backbone with a LOW_PERF_LANG_GROUPS entry
+    and no LLM_SEEN_GROUP entry trains and tests fine and then blows up at
+    unify, after the whole grid has been spent. That is exactly what happened
+    when 'xlmr' was added for grid 21a. Pin it.
+    """
+    missing = sorted(set(LOW_PERF_LANG_GROUPS) - set(LLM_SEEN_GROUP))
+    assert not missing, f'backbones with a low-perf list but no seen group: {missing}'
+    # and every mapping must point at a real LANG_GROUPS key
+    for llm, group in LLM_SEEN_GROUP.items():
+        assert group in LANG_GROUPS, f'{llm} -> {group!r} is not a LANG_GROUPS key'
+
+
+def test_xlmr_seen_group_resolves():
+    # grid 21a: XLM-R-large is the paper's own backbone, so its seen set is the
+    # published Seen-92 by definition rather than by the CC100 inference that
+    # mdeberta_seen rests on.
+    assert LLM_SEEN_GROUP['xlmr'] == 'xlmr_seen'
+    assert len(seen_langs_for('xlmr')) == 92
+    assert len(low_perf_langs_for('xlmr')) == 46
+    assert not (low_perf_langs_for('xlmr') & seen_langs_for('xlmr'))
+
+
 def test_unknown_backbone_still_degrades_to_no_low_perf_row():
     # low_perf_langs_for must never raise on a backbone without a list; the
     # table simply carries no `seen == -1` row.

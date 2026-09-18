@@ -95,6 +95,16 @@ sbatch --array=0-59%10 --mem=30G runtime/clusters/pegasus/shell/run.sh --site-pa
 
 ### The rules
 
+- **CPU-only jobs must pin the CPU partitions themselves:**
+  `--partition=RTXA6000,RTX3090,batch,L40S,V100-32GB` (the list `--no-gpu` sets at
+  `run.sh:69`). `--no-gpu` only lowers memory and asks for 0 GPUs in SBATCH mode —
+  that PARTITION variable is used **only** by interactive mode (`run.sh:108`), so
+  without the pin the `#SBATCH` GPU list at `run.sh:4` applies, which includes
+  `H100-Trails` (not permitted for this uid → the job sits PENDING).
+  **Running `run.sh` directly is not an alternative from an agent session**: this
+  shell is itself inside a small SLURM allocation (`SLURM_JOB_ID` is set, ~4G), so
+  `run.sh` takes the SBATCH branch and its `srun` becomes a step of *that* job —
+  the ~25 GB container unpack is then OOM-killed (verified 2026-09-16).
 - **ALWAYS an array — even for one job** (`--array=0`). Never a bare `sbatch`.
 - **NEVER loop `sbatch` over runs.** A shell loop that submits one `sbatch` per run
   puts one row per run in `squeue`, floods the cluster and has **no throttle**. One
@@ -197,6 +207,29 @@ builds on) — **we maintain it alongside this repo**, it is not a frozen third-
   actually happened; it also makes an unknown mode, and `clip` without a max_norm, raise.
   Behaviour is unchanged either way — normalisation is driven by the callback, whose
   registration reads the top-level `peft` block.
+
+## One metaconfig = one aggregate table
+
+**A metaconfig must be scoped so that `unify_xlt_test_res.py` + `aggregate_xlt_res.py`
+run over its run-group and produce ONE conceptually coherent table.** Do not mix
+things into a single metaconfig that you would then have to split apart to read.
+
+- Split by BACKBONE and by ARM (LR regime / recipe variant), not just by grid idea.
+  `24a_xlmr_base_armA` + `24b_xlmr_base_armC` beats one `24_xlmr_base` holding both:
+  the aggregators have no method filter, so a mixed grid yields a table whose columns
+  are `xpe` and `xpe_c` side by side and every downstream comparison has to hand-slice
+  it. (That is exactly why grid 21a needed the per-arm symlink/copy views in
+  `artefacts/_scratch/21a_arms/` to be readable at all -- avoid creating that need.)
+- Source group STAYS a CLI axis (`--source-group`), not a matrix column: unify runs
+  per source-group dir and aggregate joins them into the target x source cells. That
+  is the one split the tooling already understands.
+- Seeds and folds stay matrix rows -- they are the replication axes the aggregators
+  average over.
+- Keep the 4 methods (spt/xpe/d30/d70) together in one metaconfig: they are the
+  columns of the table, and SPT is the baseline every delta is computed against.
+
+Rule of thumb: if reading the result requires filtering the metaconfig's own rows,
+it should have been two metaconfigs.
 
 ## Metaconfigs are immutable contracts
 

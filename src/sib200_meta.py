@@ -1551,15 +1551,26 @@ def xlmr_seen_langs():
 
 
 def low_perf_langs():
-    """The paper's 46 Low-Performing languages -- PROVENANCE ONLY, not in use.
+    """The paper's 46 Low-Performing languages -- the provenance source.
 
     xpe.pdf sec. 4.2 defines these by full fine-tuning of *XLM-R-large* in the
-    original SIB-200 benchmark (accuracy < 60%), i.e. the list characterises
-    XLM-R, and we have not measured the equivalent for mDeBERTa or mGTE. So there
-    is deliberately no `LOW_PERF_LANG_GROUPS` entry for either encoder and no
-    low-perf row in their tables. Kept here because it was free to extract (the
-    appendix per-language tables tag every language) and is what a per-backbone
-    measurement would later be compared against.
+    original SIB-200 benchmark (accuracy < 60%), so the list characterises
+    XLM-R. It is registered in `LOW_PERF_LANG_GROUPS` (scripts/run_xlt.py) for
+    three backbones, and the status differs by backbone:
+
+      'xlmr'      the DEFINITION. XLM-R-large is what the measurement was of,
+                  so this row needs no provenance footnote. All 46 survive.
+      'mdeberta'  BORROWED (2026-08-11). Assumes mDeBERTa's CC100 pretraining
+                  matches XLM-R's; the equivalent full-FT sweep has NOT been run
+                  for it. All 46 survive (its seen set is the same xlmr column).
+      'mgte'      BORROWED likewise, minus yor_Latn, which mGTE pretrained on --
+                  low-perf must never intersect seen, so 45. The mDeBERTa and
+                  mGTE rows therefore cover DIFFERENT language sets.
+
+    Every table built from the two borrowed rows must say whose measurement
+    defined the group, and they are owed a per-backbone in-language full-FT
+    sweep. (This docstring previously said no encoder entry existed at all --
+    true before 2026-08-11, false since.)
     """
     return sorted(row['code'] for row in SIB200_LANGS if row['low_perf'] == 1)
 

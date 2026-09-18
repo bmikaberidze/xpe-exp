@@ -173,6 +173,33 @@ LANG_GROUPS = {
         'tgl_Latn', 'tha_Thai', 'tur_Latn', 'ukr_Cyrl', 'urd_Arab', 'vie_Latn',
         'yor_Latn', 'zho_Hans', 'zho_Hant', 'zsm_Latn',
     ],
+
+    # XLM-R-large (FacebookAI/xlm-roberta-large) -- the PAPER'S OWN BACKBONE, so
+    # this group is the published Seen-92 by definition, not by assumption. It is
+    # the same literal list as 'mdeberta_seen' (both are the `xlmr` column of
+    # src/sib200_meta.py), but the two keys are deliberately separate: the
+    # mDeBERTa one rests on "mDeBERTa trains on CC100 like XLM-R", which is an
+    # inference from the model card, while this one is the column's actual
+    # subject. Do not collapse them into an alias -- if the mDeBERTa assumption
+    # is ever revised, only that group should move.
+    'xlmr_seen': [
+        'afr_Latn', 'als_Latn', 'amh_Ethi', 'arb_Arab', 'asm_Beng', 'azb_Arab',
+        'azj_Latn', 'bel_Cyrl', 'ben_Beng', 'bos_Latn', 'bul_Cyrl', 'cat_Latn',
+        'ces_Latn', 'cym_Latn', 'dan_Latn', 'deu_Latn', 'ell_Grek', 'eng_Latn',
+        'epo_Latn', 'est_Latn', 'eus_Latn', 'fin_Latn', 'fra_Latn', 'gaz_Latn',
+        'gla_Latn', 'gle_Latn', 'glg_Latn', 'guj_Gujr', 'hau_Latn', 'heb_Hebr',
+        'hin_Deva', 'hrv_Latn', 'hun_Latn', 'hye_Armn', 'ind_Latn', 'isl_Latn',
+        'ita_Latn', 'jav_Latn', 'jpn_Jpan', 'kan_Knda', 'kat_Geor', 'kaz_Cyrl',
+        'khk_Cyrl', 'khm_Khmr', 'kir_Cyrl', 'kmr_Latn', 'kor_Hang', 'lao_Laoo',
+        'lit_Latn', 'lvs_Latn', 'mal_Mlym', 'mar_Deva', 'mkd_Cyrl', 'mya_Mymr',
+        'nld_Latn', 'nno_Latn', 'nob_Latn', 'npi_Deva', 'ory_Orya', 'pan_Guru',
+        'pbt_Arab', 'pes_Arab', 'plt_Latn', 'pol_Latn', 'por_Latn', 'ron_Latn',
+        'rus_Cyrl', 'san_Deva', 'sin_Sinh', 'slk_Latn', 'slv_Latn', 'snd_Arab',
+        'som_Latn', 'spa_Latn', 'srp_Cyrl', 'sun_Latn', 'swe_Latn', 'swh_Latn',
+        'tam_Taml', 'tel_Telu', 'tha_Thai', 'tur_Latn', 'uig_Arab', 'ukr_Cyrl',
+        'urd_Arab', 'uzn_Latn', 'vie_Latn', 'xho_Latn', 'ydd_Hebr', 'zho_Hans',
+        'zho_Hant', 'zsm_Latn',
+    ],
 }
 
 
@@ -263,6 +290,31 @@ LOW_PERF_LANG_GROUPS = {
         'nus_Latn', 'run_Latn', 'sat_Olck', 'shn_Mymr', 'smo_Latn', 'sna_Latn',
         'sot_Latn', 'ssw_Latn', 'taq_Latn', 'taq_Tfng', 'tgk_Cyrl', 'tsn_Latn',
         'tso_Latn', 'tzm_Tfng', 'umb_Latn',   # yor_Latn removed: mGTE-seen
+    ],
+
+    # ---------------------------------------------------------------------
+    # XLM-R-large -- the ONE entry here that is NOT borrowed.
+    #
+    # xpe.pdf sec. 4.2 defines Low-Performing as the SIB-200 languages on which
+    # full fine-tuning of *XLM-R-large* scores below 60% in the original
+    # benchmark. That measurement is OF this backbone, so for 'xlmr' the list is
+    # the definition rather than a stand-in. Tables built from this row need no
+    # "whose measurement defined the group" footnote -- unlike the 'mdeberta'
+    # and 'mgte' rows above, which still owe a per-backbone full-FT sweep.
+    #
+    # The full 46 survive: the list was derived from the same `xlmr` column that
+    # defines 'xlmr_seen', so it is disjoint from it by construction and
+    # add_seen()'s seen/low-perf clash check cannot fire.
+    # ---------------------------------------------------------------------
+    'xlmr': [
+        'ace_Arab', 'aka_Latn', 'arb_Latn', 'ayr_Latn', 'bam_Latn', 'bem_Latn',
+        'bjn_Arab', 'bod_Tibt', 'cjk_Latn', 'ckb_Arab', 'dyu_Latn', 'dzo_Tibt',
+        'ewe_Latn', 'fon_Latn', 'ibo_Latn', 'kab_Latn', 'kam_Latn', 'kbp_Latn',
+        'kik_Latn', 'kin_Latn', 'kmb_Latn', 'knc_Arab', 'lua_Latn', 'lug_Latn',
+        'min_Arab', 'mni_Beng', 'mos_Latn', 'mri_Latn', 'nqo_Nkoo', 'nso_Latn',
+        'nus_Latn', 'run_Latn', 'sat_Olck', 'shn_Mymr', 'smo_Latn', 'sna_Latn',
+        'sot_Latn', 'ssw_Latn', 'taq_Latn', 'taq_Tfng', 'tgk_Cyrl', 'tsn_Latn',
+        'tso_Latn', 'tzm_Tfng', 'umb_Latn', 'yor_Latn',
     ],
 }
 

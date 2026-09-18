@@ -67,7 +67,16 @@ LLM_SEEN_GROUP = {
     # SIB-200 encoders; these runs carry no fold axis (see has_seed_axis).
     'mdeberta': 'mdeberta_seen',
     'mgte': 'mgte_seen',
+    # XLM-R-large, the paper's own backbone (grid 21a). Same no-fold SIB-200
+    # shape as the two encoders above.
+    'xlmr': 'xlmr_seen',
 }
+
+# Every backbone that can appear in the `llm` column needs an entry above --
+# seen_langs_for() RAISES on a miss (unlike low_perf_langs_for(), which degrades
+# to an empty set). A missing key therefore surfaces only at unify time, i.e.
+# after a whole grid has already been trained. test_llm_seen_group_covers_every_backbone
+# pins this against LOW_PERF_LANG_GROUPS so a new backbone cannot be half-wired.
 
 
 def parse_method(run_name: str) -> str:
