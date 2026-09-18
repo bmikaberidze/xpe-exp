@@ -1,26 +1,21 @@
-# Belebele self-split grid, Aya-Expanse-8b, source group ENARZHO.
+# 14a_bebe_grid_full_aya, source group ENARZHO (aya).
 #
-# The 0.4 rebuild of config/meta/14a_bebe_grid_full_aya.yml, whose runs live under
-# artefacts/evals/xlt_runs/aya/enarzho/14a_bebe_grid_full_aya/ and were produced by
-# the pre-micm-nlp-0.4 tree. One group config per source group: joshi5 and aya_seen
-# are their own files, so a group's runs can never mix two source sets.
+# Generated: scripts/gen_xlt_group_config.sh 14a_bebe_grid_full_aya enarzho aya
+# One group config per source group: one experiment, one output directory
+# (artefacts/runs/groups/14a_bebe_grid_full_aya.enarzho/), so a group's runs can never mix two
+# source sets. Every entry key beyond the reserved ones is stamped on each result
+# row, so method / fold / source_group / llm are columns of the aggregate table.
 #
 # Axes: method (xpe, spt, d30, d70) x fold (0,1,2) x seed (10..19) = 120 runs.
-# Every entry key beyond the reserved ones is stamped on each result row, so
-# method / fold / source_group are columns of the aggregate table.
-#
-# LRs come from the unit configs (XPE 5e-4; SPT-part 0.5 after the stability re-pick).
 # The DUAL arms differ from each other only by peft.encoder_ratio.
 #
-# Aya needs >80 GB VRAM -> the sbatch MUST pin the big-VRAM partitions.
-#
-# Dispatch:
-#   sbatch --array=0-119%10 --mem=64G \
-#     --partition=B200,H200,H200-PCI,H100-PCI,H100-Trails \
+# Dispatch (Aya needs >80 GB VRAM -> pin the big-VRAM partitions; --mem is host RAM):
+#   sbatch --array=0-119%10 --mem=80G \
+#     --partition=B200,H200,H200-PCI,H100-PCI \
 #     runtime/clusters/pegasus/shell/run.sh --site-packages \
 #       "python -m micm_nlp run-group \
 #          --group-config config/groups/14a_bebe_grid_full_aya.enarzho.yml \
-#          --runner scripts/xlt_runner.py \
+#          --runner scripts.xlt_runner:run \
 #          --root-path /fscratch/bmikaberidze/xpe-exp"
 
 configs:
@@ -32,68 +27,68 @@ configs:
 runs:
 
   # ===== xpe =====
-  - {config: xpe, name: xpe_f0_s10, seed: 10, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f0_s11, seed: 11, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f0_s12, seed: 12, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f0_s13, seed: 13, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f0_s14, seed: 14, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f0_s15, seed: 15, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f0_s16, seed: 16, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f0_s17, seed: 17, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f0_s18, seed: 18, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f0_s19, seed: 19, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s10, seed: 10, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s11, seed: 11, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s12, seed: 12, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s13, seed: 13, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s14, seed: 14, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s15, seed: 15, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s16, seed: 16, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s17, seed: 17, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s18, seed: 18, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f1_s19, seed: 19, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s10, seed: 10, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s11, seed: 11, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s12, seed: 12, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s13, seed: 13, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s14, seed: 14, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s15, seed: 15, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s16, seed: 16, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s17, seed: 17, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s18, seed: 18, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: xpe, name: xpe_f2_s19, seed: 19, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s10, seed: 10, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s11, seed: 11, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s12, seed: 12, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s13, seed: 13, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s14, seed: 14, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s15, seed: 15, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s16, seed: 16, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s17, seed: 17, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s18, seed: 18, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f0_s19, seed: 19, fold: 0, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s10, seed: 10, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s11, seed: 11, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s12, seed: 12, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s13, seed: 13, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s14, seed: 14, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s15, seed: 15, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s16, seed: 16, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s17, seed: 17, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s18, seed: 18, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f1_s19, seed: 19, fold: 1, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s10, seed: 10, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s11, seed: 11, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s12, seed: 12, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s13, seed: 13, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s14, seed: 14, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s15, seed: 15, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s16, seed: 16, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s17, seed: 17, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s18, seed: 18, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: xpe,  name: xpe_f2_s19, seed: 19, fold: 2, method: xpe, source_group: enarzho, llm: aya, separate_test: {config: test}}
 
   # ===== spt =====
-  - {config: spt, name: spt_f0_s10, seed: 10, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f0_s11, seed: 11, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f0_s12, seed: 12, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f0_s13, seed: 13, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f0_s14, seed: 14, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f0_s15, seed: 15, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f0_s16, seed: 16, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f0_s17, seed: 17, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f0_s18, seed: 18, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f0_s19, seed: 19, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s10, seed: 10, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s11, seed: 11, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s12, seed: 12, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s13, seed: 13, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s14, seed: 14, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s15, seed: 15, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s16, seed: 16, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s17, seed: 17, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s18, seed: 18, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f1_s19, seed: 19, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s10, seed: 10, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s11, seed: 11, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s12, seed: 12, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s13, seed: 13, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s14, seed: 14, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s15, seed: 15, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s16, seed: 16, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s17, seed: 17, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s18, seed: 18, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
-  - {config: spt, name: spt_f2_s19, seed: 19, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s10, seed: 10, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s11, seed: 11, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s12, seed: 12, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s13, seed: 13, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s14, seed: 14, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s15, seed: 15, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s16, seed: 16, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s17, seed: 17, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s18, seed: 18, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f0_s19, seed: 19, fold: 0, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s10, seed: 10, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s11, seed: 11, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s12, seed: 12, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s13, seed: 13, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s14, seed: 14, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s15, seed: 15, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s16, seed: 16, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s17, seed: 17, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s18, seed: 18, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f1_s19, seed: 19, fold: 1, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s10, seed: 10, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s11, seed: 11, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s12, seed: 12, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s13, seed: 13, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s14, seed: 14, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s15, seed: 15, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s16, seed: 16, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s17, seed: 17, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s18, seed: 18, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
+  - {config: spt,  name: spt_f2_s19, seed: 19, fold: 2, method: spt, source_group: enarzho, llm: aya, separate_test: {config: test}}
 
   # ===== d30 =====
   - {config: dual, name: d30_f0_s10, seed: 10, fold: 0, method: d30, source_group: enarzho, llm: aya, overrides: {peft.encoder_ratio: 0.3}, separate_test: {config: test}}

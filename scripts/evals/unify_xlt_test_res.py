@@ -85,11 +85,13 @@ def column_name(run_dir: Path) -> str:
     return TIMESTAMP_RE.sub('', run_dir.name)
 
 
-# The test phase of an XLT run is the entry's `separate_test` config, so the
-# trainer writes it under the `separate_` prefix; a run with no training phase
-# carries no stage suffix, giving `separate_test.csv`. One row per metric group,
-# and a metric group is a target language (scripts/xlt_runner.py).
-RESULTS_GLOB = 'separate_test*.csv'
+# A tune-and-test run's test phase is the entry's `separate_test` config, so the
+# trainer writes it under the `separate_` prefix; a zero-shot or replay entry has
+# no second config and writes the plain name. Neither carries a stage suffix,
+# having no training phase of its own. One row per metric group, and a metric
+# group is a target language (scripts/xlt_runner.py).
+RESULTS_GLOBS = ('separate_test*.csv', 'test.csv')
+RESULTS_GLOB = RESULTS_GLOBS[0]   # what a tune-and-test grid writes; kept for messages
 
 # What the group entry stamps on every row (micm_nlp.group.scalar_columns) and
 # what this script needs from it. `llm` and `source_group` are entry keys because
@@ -105,10 +107,10 @@ def collect(path: Path, llm: str | None = None) -> pd.DataFrame:
     `pre-micm-nlp-0.4` tree, which is what produced them.
     """
     frames = []
-    for csv in sorted(Path(path).rglob(RESULTS_GLOB)):
+    for csv in sorted(f for g in RESULTS_GLOBS for f in Path(path).rglob(g)):
         frames.append(pd.read_csv(csv))
     if not frames:
-        raise SystemExit(f'No {RESULTS_GLOB} found under {path}')
+        raise SystemExit(f'No {" / ".join(RESULTS_GLOBS)} found under {path}')
     df = pd.concat(frames, ignore_index=True)
     df = df.rename(columns={'metric_group': 'target_lang', 'name': 'run_name'})
     if 'llm' not in df.columns:
@@ -318,7 +320,7 @@ def write_aggregate(path: Path, prefix: Path, zero_shot_path: Path | None,
 def unify_runs(path: Path, key: str = 'target_lang', value: str = 'accuracy') -> pd.DataFrame:
     """One column per run (no aggregation): rows aligned on `key`."""
     series = []
-    for res in sorted(Path(path).rglob(RESULTS_GLOB)):
+    for res in sorted(f for g in RESULTS_GLOBS for f in Path(path).rglob(g)):
         name = column_name(res.parent)
         df = pd.read_csv(res).rename(columns={'metric_group': 'target_lang'})
         for col in (key, value):
@@ -329,7 +331,7 @@ def unify_runs(path: Path, key: str = 'target_lang', value: str = 'accuracy') ->
             raise ValueError(f"{res}: duplicate '{key}' values, cannot align")
         series.append(col)
     if not series:
-        raise SystemExit(f'No {RESULTS_GLOB} found under {path}')
+        raise SystemExit(f'No {" / ".join(RESULTS_GLOBS)} found under {path}')
 
     seen: dict[str, int] = {}
     for s in series:

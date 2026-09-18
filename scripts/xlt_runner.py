@@ -90,23 +90,40 @@ def test_across_languages(test_config, targets: list[str]):
 def run(config, ctx):
     """Tune on the entry's source group, then test the adapter cross-lingually.
 
-    :param config: the entry's tune config, already seeded and overridden.
-    :param ctx: the run context; ``ctx.test_config`` is the entry's ``separate_test``,
-        which lands in the same run directory under the ``separate_`` prefix.
+    Three shapes, chosen by the entry -- the same three the pre-0.4 CLI had:
+
+    ``separate_test:``
+        tune-and-test. ``config`` is the tune config; the test phase runs under
+        ``ctx.test_config``, which lands in the same run directory with the
+        ``separate_`` prefix.
+    no ``separate_test:``, ``adapter: <uuid4>``
+        replay. No tuning; ``config`` is the test config and the named adapter is
+        wired into it.
+    no ``separate_test:``, no ``adapter:``
+        zero-shot. ``config`` is the test config, tested as it stands -- whatever
+        ``model.pretrained.adapter`` it declares, typically the bare base model.
+
     :returns: the test phase's ``RunOutput`` -- its ``results`` hold one row per
         target language.
     """
     langs = source_langs(ctx.entry)
     fold = ctx.entry.get('fold')
 
-    aim_at_fold(config, fold)
-    model = tune(config, langs)
+    if ctx.test_config is None:            # replay or zero-shot: `config` is the test config
+        test_config = config
+        aim_at_fold(test_config, fold)
+        adapter = ctx.entry.get('adapter')
+        if adapter:
+            wire_test_to_adapter(test_config, adapter)
+        phase = f'replaying adapter {adapter}' if adapter else 'zero-shot'
+    else:                                  # tune-and-test
+        aim_at_fold(config, fold)
+        model = tune(config, langs)
+        test_config = ctx.test_config
+        aim_at_fold(test_config, fold)
+        wire_test_to_adapter(test_config, model.uuid4, model.path)
+        phase = f'tuned on {len(langs)} source langs'
 
-    test_config = ctx.test_config
-    if test_config is None:
-        raise ValueError('each run entry needs `separate_test:` naming the test config')
-    aim_at_fold(test_config, fold)
-    wire_test_to_adapter(test_config, model.uuid4, model.path)
     targets = discover_target_langs(test_config, exclude=langs)
-    print(f'[xlt] {ctx.name}: tuned on {len(langs)} source langs, testing {len(targets)} targets')
+    print(f'[xlt] {ctx.name}: {phase}, testing {len(targets)} targets')
     return test_across_languages(test_config, targets)
