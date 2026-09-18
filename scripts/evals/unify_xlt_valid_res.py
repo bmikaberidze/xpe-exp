@@ -1,13 +1,13 @@
-"""Unify per-run XLT *validation* results (valid_res.csv) into per-fold aggregates.
+"""Unify per-run XLT *validation* results into per-fold aggregates.
 
-Each tune run writes a valid_res.csv with the swept hyperparameter already
-materialised as a column, e.g.:
+Each run's validation rows carry the entry's own keys as columns, so the swept
+hyperparameter is materialised by the group config, e.g. `lr: 0.5` on every entry:
 
-    run_name,method,run_group,llm,fold,seed,learning_rate,best_val_acc,...
-    spt_lr5e1_s10,spt,9c_...,bloom,1,10,0.5,0.83,...
+    group,name,index,config,time_id,seed,fold,method,source_group,lr,accuracy,step
+    9c_lr_search...,spt_lr5e1_s10,3,spt,20260918_1130,10,1,spt,joshi5,0.5,0.83,400
 
-So this is meta-config agnostic: the LR (or whatever was swept) is read straight
-off the CSV column -- no wandb, no run_name parsing, no hardcoded grid.
+So this is group-config agnostic: the LR (or whatever was swept) is read straight
+off the result rows -- no wandb, no run_name parsing, no hardcoded grid.
 
 Aggregation = "means per fold, std across seeds":
   group by (method, <group-key>, fold) -> mean of best_val_acc over seeds,
@@ -19,7 +19,7 @@ Output (beside PATH unless --out given):
 
 Usage:
     python -m scripts.evals.unify_xlt_valid_res \\
-        artefacts/evals/xlt_runs/bloom/joshi5/9c_lr_search_bebe_bloomz
+        artefacts/runs/groups/9c_lr_search_bebe_bloomz.joshi5
     python -m scripts.evals.unify_xlt_valid_res <path> --group-by weight_decay
 """
 import argparse
@@ -28,14 +28,29 @@ from pathlib import Path
 import pandas as pd
 
 
+# The tune phase's after-training evaluation of the best checkpoint, written when
+# the unit config sets `eval.after_training: true` (0.4 writes no validation rows
+# otherwise). `accuracy` here is the same number the old `valid_res.csv` recorded as
+# `best_val_acc`: the trainer reloads the best checkpoint before this pass.
+VALID_GLOB = 'eval_validation_after_train.csv'
+
+
 def collect(path: Path) -> pd.DataFrame:
-    """Concatenate every valid_res.csv under PATH (one row per run)."""
+    """Concatenate every run's validation rows under a group directory.
+
+    Reads the 0.4 layout only -- `runs/groups/{group}/{time_id}_{name}/`.
+    """
     frames = []
-    for vr in sorted(Path(path).rglob('valid_res.csv')):
+    for vr in sorted(Path(path).rglob(VALID_GLOB)):
         frames.append(pd.read_csv(vr))
     if not frames:
-        raise SystemExit(f'No valid_res.csv found under {path}')
-    return pd.concat(frames, ignore_index=True)
+        raise SystemExit(
+            f'No {VALID_GLOB} found under {path} -- the tune config needs '
+            '`eval.after_training: true`, or the runs predate the 0.4 migration')
+    df = pd.concat(frames, ignore_index=True)
+    if 'best_val_acc' not in df.columns and 'accuracy' in df.columns:
+        df = df.rename(columns={'accuracy': 'best_val_acc'})
+    return df
 
 
 def _with_fold_axis(df: pd.DataFrame) -> pd.DataFrame:
@@ -117,7 +132,7 @@ def _print_best(out: pd.DataFrame, group_key: str) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('path', type=Path, help='root to walk for valid_res.csv files')
+    ap.add_argument('path', type=Path, help='group directory to walk for validation results')
     ap.add_argument('--group-by', default='learning_rate',
                     help='swept-hyperparameter column to group on (default: learning_rate)')
     ap.add_argument('--out', type=Path, default=None,

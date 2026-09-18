@@ -1,8 +1,8 @@
-"""Unify per-run XLT *test* results (raw.csv) into one accuracy table.
+"""Unify per-run XLT *test* results into one accuracy table.
 
 Two modes, chosen automatically by what the runs carry:
 
-  AGGREGATE mode -- raw.csv has `fold` AND `seed` columns:
+  AGGREGATE mode -- the runs carry `fold` AND `seed` columns:
     1. POOL folds within (method, seed, target_lang) -> one accuracy over all
        items (weighted by per-fold n). Folds are item-disjoint partitions, so
        pooling = one big evaluation, never an average-with-std.
@@ -22,28 +22,23 @@ Two modes, chosen automatically by what the runs carry:
     Optional --zero-shot-path pools an existing zero-shot run's folds into a
     `zero_shot_acc`/`zero_shot_std` pair (no seed axis -> std is NaN, n_seeds 0).
 
-  FALLBACK mode -- raw.csv has no seed column (e.g. plain LR-search test
+  FALLBACK mode -- the runs carry no seed column (e.g. plain LR-search test
   runs): no aggregation is possible, so emit one column per run instead:
       <prefix>.csv       wide: rows=target_lang, one col per run folder
                          (leading timestamp stripped, e.g. 20260522_170730_xpe -> xpe)
 
+The path is one group directory -- one experiment, one source group, one table
+(`docs/micm-nlp-0.4-migration.md`).
+
 Usage:
     python -m scripts.evals.unify_xlt_test_res \\
-        artefacts/evals/xlt_runs/bloom/joshi5/9_bebe_grid_bloomz \\
-        --zero-shot-path artefacts/evals/xlt_runs/bloom/zero/0_zero_shot_eval
+        artefacts/runs/groups/14a_bebe_grid_full_aya.enarzho \\
+        --zero-shot-path artefacts/runs/groups/zs_bebe_folds_aya
 
-    python -m scripts.evals.unify_xlt_test_res <path>   # fallback if no folds/seeds
+    python -m scripts.evals.unify_xlt_test_res <group dir>   # fallback if no folds/seeds
 
-    # BloomZ
-    python -m scripts.evals.unify_xlt_test_res \
-        artefacts/evals/xlt_runs/bloom/joshi5/11_bebe_grid_bloomz \
-        --zero-shot-path /home/bmikaberidze/xpe-exp/artefacts/evals/xlt_runs/bloom/zero/0_zero_shot_eval/20260610_105627_zs_eval_seq
-
-    # Aya
-    python -m scripts.evals.unify_xlt_test_res \
-        artefacts/evals/xlt_runs/aya/aya_seen/12_bebe_grid_aya \
-        --zero-shot-path /home/bmikaberidze/xpe-exp/artefacts/evals/xlt_runs/aya/zero/0_zero_shot_eval/20260508_075457_zs_eval
-
+    # Runs dispatched before `llm:` was a group entry key
+    python -m scripts.evals.unify_xlt_test_res <group dir> --llm aya
 """
 import argparse
 import re
@@ -59,7 +54,7 @@ TIMESTAMP_RE = re.compile(r'^\d{8}_\d{6}_')
 SEEDFOLD_RE = re.compile(r'(_f\d+)?_s\d+$')
 
 # Which LANG_GROUPS entry is the pretraining-"seen" set for each backbone (the
-# `llm` column in raw.csv). LANG_GROUPS (scripts/run_xlt.py) is the source of
+# `llm` column stamped by the group entry). LANG_GROUPS (scripts/run_xlt.py) is the source of
 # truth for the actual language lists.
 LLM_SEEN_GROUP = {
     'bloom': 'bloom_seen',
@@ -90,16 +85,42 @@ def column_name(run_dir: Path) -> str:
     return TIMESTAMP_RE.sub('', run_dir.name)
 
 
-def collect(path: Path) -> pd.DataFrame:
-    """Concatenate every raw.csv under PATH, adding a parsed `method` column."""
+# The test phase of an XLT run is the entry's `separate_test` config, so the
+# trainer writes it under the `separate_` prefix; a run with no training phase
+# carries no stage suffix, giving `separate_test.csv`. One row per metric group,
+# and a metric group is a target language (scripts/xlt_runner.py).
+RESULTS_GLOB = 'separate_test*.csv'
+
+# What the group entry stamps on every row (micm_nlp.group.scalar_columns) and
+# what this script needs from it. `llm` and `source_group` are entry keys because
+# the run directory no longer carries them as path segments.
+REQUIRED = ('method', 'seed', 'target_lang', 'accuracy', 'n')
+
+
+def collect(path: Path, llm: str | None = None) -> pd.DataFrame:
+    """Every run's test rows under a group directory, one row per target language.
+
+    Reads the 0.4 layout only -- `runs/groups/{group}/{time_id}_{name}/`. Results
+    produced before the migration live under `evals/xlt_runs/` and are read by the
+    `pre-micm-nlp-0.4` tree, which is what produced them.
+    """
     frames = []
-    for raw in sorted(Path(path).rglob('raw.csv')):
-        df = pd.read_csv(raw)
-        df['method'] = df['run_name'].map(parse_method)
-        frames.append(df)
+    for csv in sorted(Path(path).rglob(RESULTS_GLOB)):
+        frames.append(pd.read_csv(csv))
     if not frames:
-        raise SystemExit(f'No raw.csv found under {path}')
-    return pd.concat(frames, ignore_index=True)
+        raise SystemExit(f'No {RESULTS_GLOB} found under {path}')
+    df = pd.concat(frames, ignore_index=True)
+    df = df.rename(columns={'metric_group': 'target_lang', 'name': 'run_name'})
+    if 'llm' not in df.columns:
+        if llm is None:
+            raise SystemExit(
+                f'{path}: rows carry no `llm` column -- add `llm:` to the group entries, '
+                'or pass --llm for runs dispatched before it was added')
+        df['llm'] = llm
+    missing = [c for c in REQUIRED if c not in df.columns]
+    if missing:
+        raise SystemExit(f'{path}: result rows lack {missing}; found {sorted(df.columns)}')
+    return df
 
 
 def has_seed_axis(df: pd.DataFrame) -> bool:
@@ -264,15 +285,15 @@ def restrict_to_seeds(df: pd.DataFrame, seeds) -> pd.DataFrame:
 
 
 def write_aggregate(path: Path, prefix: Path, zero_shot_path: Path | None,
-                    seeds=None) -> None:
-    grid = collect(path)
+                    seeds=None, llm: str | None = None) -> None:
+    grid = collect(path, llm)
     if seeds:
         grid = restrict_to_seeds(grid, seeds)
     long = seed_mean_std(pool_folds(grid))
     if zero_shot_path is not None:
         # zero-shot is evaluated on all langs; keep only the grid's target langs
         # so every output row has all methods (no zero-shot-only rows).
-        zs = restrict_to_langs(pool_zero_shot(collect(zero_shot_path)),
+        zs = restrict_to_langs(pool_zero_shot(collect(zero_shot_path, llm)),
                                long['target_lang'].unique())
         long = pd.concat([long, zs], ignore_index=True)
 
@@ -297,18 +318,18 @@ def write_aggregate(path: Path, prefix: Path, zero_shot_path: Path | None,
 def unify_runs(path: Path, key: str = 'target_lang', value: str = 'accuracy') -> pd.DataFrame:
     """One column per run (no aggregation): rows aligned on `key`."""
     series = []
-    for raw in sorted(Path(path).rglob('raw.csv')):
-        name = column_name(raw.parent)
-        df = pd.read_csv(raw)
+    for res in sorted(Path(path).rglob(RESULTS_GLOB)):
+        name = column_name(res.parent)
+        df = pd.read_csv(res).rename(columns={'metric_group': 'target_lang'})
         for col in (key, value):
             if col not in df.columns:
-                raise ValueError(f"{raw}: missing '{col}' column (has {list(df.columns)})")
+                raise ValueError(f"{res}: missing '{col}' column (has {list(df.columns)})")
         col = df.set_index(key)[value].rename(name)
         if col.index.has_duplicates:
-            raise ValueError(f"{raw}: duplicate '{key}' values, cannot align")
+            raise ValueError(f"{res}: duplicate '{key}' values, cannot align")
         series.append(col)
     if not series:
-        raise SystemExit(f'No raw.csv found under {path}')
+        raise SystemExit(f'No {RESULTS_GLOB} found under {path}')
 
     seen: dict[str, int] = {}
     for s in series:
@@ -330,9 +351,11 @@ def write_fallback(path: Path, prefix: Path, key: str, value: str) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('path', type=Path, help='root to walk for test raw.csv files')
+    ap.add_argument('path', type=Path, help='group directory to walk for test result files')
     ap.add_argument('--zero-shot-path', type=Path, default=None,
-                    help='root to walk for existing zero-shot raw.csv files (aggregate mode only)')
+                    help='group directory of an existing zero-shot run (aggregate mode only)')
+    ap.add_argument('--llm', default=None,
+                    help='backbone tag, for runs dispatched before `llm:` was a group entry key')
     ap.add_argument('--out-prefix', type=Path, default=None,
                     help='output prefix (default: PATH/test_unified)')
     ap.add_argument('--seeds', default=None,
@@ -345,8 +368,8 @@ def main() -> None:
     prefix = args.out_prefix or (args.path / 'test_unified')
     seeds = [int(s) for s in args.seeds.split(',')] if args.seeds else None
 
-    if has_seed_axis(collect(args.path)):
-        write_aggregate(args.path, prefix, args.zero_shot_path, seeds)
+    if has_seed_axis(collect(args.path, args.llm)):
+        write_aggregate(args.path, prefix, args.zero_shot_path, seeds, args.llm)
     else:
         if args.zero_shot_path is not None:
             print('warning: --zero-shot-path ignored in fallback mode (no fold/seed columns)')

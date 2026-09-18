@@ -1,8 +1,8 @@
 """Aggregate the per-language XLT tables into ONE result table per backbone.
 
 Input  = the `test_unified.csv` files written by `unify_xlt_test_res.py`, one per
-         SOURCE group, under artefacts/evals/xlt_runs/<llm>/<src_group>/<run_group>/
-Output = artefacts/evals/xlt_runs/<llm>/aggr_res.csv  (one row per
+         SOURCE group, in artefacts/runs/groups/<grid>.<src_group>/
+Output = artefacts/runs/groups/<grid>.aggr_res.csv  (one row per
          TARGET-group x SOURCE-group cell, all methods side by side)
 
 TARGET groups are read off the tri-state `seen` column that unify writes
@@ -30,10 +30,10 @@ the per-lang across-seed std -- a typical seed-to-seed spread, NOT the std of th
 reported mean. zero_shot has no seed axis, so it gets no _std column at all.
 
 Usage:
-    python -m scripts.evals.aggregate_xlt_res artefacts/evals/xlt_runs/aya \
+    python -m scripts.evals.aggregate_xlt_res artefacts/runs/groups \
         --run-group 14a_bebe_grid_full_aya
 
-    python -m scripts.evals.aggregate_xlt_res artefacts/evals/xlt_runs/bloom \
+    python -m scripts.evals.aggregate_xlt_res artefacts/runs/groups \
         --run-group 14b_bebe_grid_full_bloomz --out /tmp/bloom.csv
 """
 
@@ -66,16 +66,20 @@ def source_sort_key(src: str) -> tuple[int, str]:
 
 
 def find_tables(root: Path, run_group: str, table: str = TABLE) -> dict[str, Path]:
-    """{source_group: <table>} for every source group under a backbone root that
-    has a table for this run_group, in source_sort_key order. 'zero' dirs hold
-    zero-shot evals, not a source group, so they are skipped."""
+    """{source_group: <table>} for every source group of this grid, in source_sort_key order.
+
+    A group directory is named ``{grid}.{source_group}`` -- one group config per
+    source group, one output directory each -- so the source group is the stem's
+    last dotted segment. A `.zero` directory holds a zero-shot eval, not a source
+    group, so it is skipped.
+    """
     found = {}
-    for csv in root.glob(f'*/{run_group}/{table}'):
-        src = csv.parent.parent.name
+    for csv in root.glob(f'{run_group}.*/{table}'):
+        src = csv.parent.name.split('.')[-1]
         if src != 'zero':
             found[src] = csv
     if not found:
-        raise SystemExit(f'no */{run_group}/{table} under {root}')
+        raise SystemExit(f'no {run_group}.*/{table} under {root}')
     return {src: found[src] for src in sorted(found, key=source_sort_key)}
 
 
@@ -161,9 +165,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('root', type=Path,
-                    help='backbone root, e.g. artefacts/evals/xlt_runs/aya')
+                    help='the groups root, e.g. artefacts/runs/groups')
     ap.add_argument('--run-group', required=True,
-                    help='metaconfig stem, e.g. 14a_bebe_grid_full_aya')
+                    help='grid name = the group stem before the source group, e.g. 14a_bebe_grid_full_aya')
     ap.add_argument('--table-name', default=TABLE,
                     help=f'per-lang table to read in each run-group dir '
                          f'(default {TABLE}); use this to aggregate a seed-'
@@ -172,12 +176,12 @@ def main() -> None:
                     help="LANG_GROUPS name dropped from ALL target groups "
                          "(default joshi5); pass '' to disable")
     ap.add_argument('--out', type=Path, default=None,
-                    help='output csv (default <root>/aggr_res.csv)')
+                    help='output csv (default <root>/{run-group}.aggr_res.csv)')
     args = ap.parse_args()
 
     agg = aggregate(args.root, args.run_group, args.exclude_group or None,
                     args.table_name)
-    out = args.out or args.root / 'aggr_res.csv'
+    out = args.out or args.root / f'{args.run_group}.aggr_res.csv'
     agg.to_csv(out, index=False)
     print(f'wrote {out}  ({len(agg)} cells)')
 

@@ -1,11 +1,12 @@
 """Unit tests for the XLT test-result unifier (aggregate + fallback modes)."""
 import math
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from scripts.evals.unify_xlt_test_res import (
-    parse_method, has_seed_axis, pool_folds, seed_mean_std, pool_zero_shot,
+    collect, has_seed_axis, pool_folds, seed_mean_std, pool_zero_shot,
     column_name, unify_runs, to_wide, restrict_to_langs,
     backbone, seen_langs_for, add_seen, low_perf_langs_for, restrict_to_seeds,
     LLM_SEEN_GROUP,
@@ -13,18 +14,33 @@ from scripts.evals.unify_xlt_test_res import (
 from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
 
-# --- method parsing ---------------------------------------------------------
+# --- collecting the runs ----------------------------------------------------
 
-def test_parse_method_new_naming():
-    assert parse_method('20260610_105815_xpe_f0_s10') == 'xpe'
+def _run_dir(group: Path, name: str, rows: list[dict]) -> None:
+    """One run directory holding the test phase's result file."""
+    d = group / name
+    d.mkdir(parents=True)
+    pd.DataFrame(rows).to_csv(d / 'separate_test.csv', index=False)
 
 
-def test_parse_method_old_naming():
-    assert parse_method('20260610_105815_xpe') == 'xpe'
+def test_collect_reads_every_run_and_names_the_language_column(tmp_path):
+    group = tmp_path / '14a_grid.enarzho'
+    base = {'method': 'xpe', 'seed': 10, 'fold': 0, 'llm': 'aya', 'accuracy': 0.7, 'n': 300}
+    _run_dir(group, '20260918_100000_xpe_f0_s10', [{**base, 'metric_group': 'kat_Geor'}])
+    _run_dir(group, '20260918_100100_xpe_f1_s10', [{**base, 'fold': 1, 'metric_group': 'kat_Geor'}])
+
+    df = collect(group)
+    assert list(df['target_lang']) == ['kat_Geor', 'kat_Geor'] and sorted(df['fold']) == [0, 1]
 
 
-def test_parse_method_zero_shot_runname():
-    assert parse_method('20260610_145744_zs_eval_seq') == 'zs_eval_seq'
+def test_collect_fills_llm_only_when_the_rows_lack_it(tmp_path):
+    group = tmp_path / '14a_grid.enarzho'
+    _run_dir(group, '20260918_100000_xpe_f0_s10', [
+        {'method': 'xpe', 'seed': 10, 'fold': 0, 'metric_group': 'kat_Geor', 'accuracy': 0.7, 'n': 300}])
+
+    assert collect(group, llm='aya')['llm'].unique().tolist() == ['aya']
+    with pytest.raises(SystemExit, match='llm'):
+        collect(group)
 
 
 # --- mode detection ---------------------------------------------------------
@@ -260,7 +276,7 @@ def test_unify_runs_one_column_per_run(tmp_path):
         pd.DataFrame([
             {'target_lang': 'deu_Latn', 'accuracy': acc},
             {'target_lang': 'fra_Latn', 'accuracy': acc + 0.01},
-        ]).to_csv(d / 'raw.csv', index=False)
+        ]).to_csv(d / 'separate_test.csv', index=False)
 
     table = unify_runs(tmp_path)
     assert list(table.columns) == ['xpe_lr5e5', 'spt_lr5e5']
