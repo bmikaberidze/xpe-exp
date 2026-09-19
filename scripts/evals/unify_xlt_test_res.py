@@ -49,9 +49,6 @@ import pandas as pd
 from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
 TIMESTAMP_RE = re.compile(r'^\d{8}_\d{6}_')
-# Belebele runs are `<method>_f<fold>_s<seed>`; SIB-200 has no fold axis and is
-# `<method>_s<seed>`. Both must reduce to the bare method tag.
-SEEDFOLD_RE = re.compile(r'(_f\d+)?_s\d+$')
 
 # Which LANG_GROUPS entry is the pretraining-"seen" set for each backbone (the
 # `llm` column stamped by the group entry). LANG_GROUPS (scripts/run_xlt.py) is the source of
@@ -72,12 +69,6 @@ LLM_SEEN_GROUP = {
 # to an empty set). A missing key therefore surfaces only at unify time, i.e.
 # after a whole grid has already been trained. test_llm_seen_group_covers_every_backbone
 # pins this against LOW_PERF_LANG_GROUPS so a new backbone cannot be half-wired.
-
-
-def parse_method(run_name: str) -> str:
-    """Method tag from a run_name: strip leading timestamp + trailing _f<d>_s<d>."""
-    name = TIMESTAMP_RE.sub('', run_name)
-    return SEEDFOLD_RE.sub('', name)
 
 
 def column_name(run_dir: Path) -> str:

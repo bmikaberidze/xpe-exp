@@ -4,7 +4,7 @@ import math
 import pandas as pd
 import pytest
 
-from scripts.evals.unify_xlt_valid_res import collect, aggregate
+from scripts.evals.unify_xlt_valid_res import VALID_GLOB, aggregate, collect
 
 
 def _valid_df():
@@ -70,7 +70,7 @@ def test_collect_reads_valid_res_files(tmp_path):
         pd.DataFrame([{
             'run_name': f'spt_lr5e1_s{seed}', 'method': 'spt', 'fold': 0,
             'seed': seed, 'learning_rate': 0.5, 'best_val_acc': acc,
-        }]).to_csv(d / 'valid_res.csv', index=False)
+        }]).to_csv(d / VALID_GLOB, index=False)
     df = collect(tmp_path)
     assert len(df) == 2
     assert set(df['seed']) == {10, 11}

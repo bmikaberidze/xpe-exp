@@ -312,13 +312,6 @@ def test_has_seed_axis_still_true_for_folded_runs():
     assert has_seed_axis(pd.DataFrame([_foldless(fold=0)])) is True
 
 
-def test_parse_method_strips_a_seed_only_suffix():
-    assert parse_method('20260805_101112_xpe_s11') == 'xpe'
-    assert parse_method('20260805_101112_d70_s15') == 'd70'
-    # folded Belebele run names must keep working
-    assert parse_method('20260720_090000_xpe_f0_s10') == 'xpe'
-
-
 def test_pool_folds_without_fold_column_reports_one_fold():
     df = pd.DataFrame([_foldless(), _foldless(target_lang='swh_Latn', accuracy=0.60)])
     pooled = pool_folds(df)

@@ -20,8 +20,8 @@ LANGS = [
 
 
 def _write_table(root, src_group, langs, acc=0.5):
-    """A minimal test_unified.csv for one source group."""
-    d = root / src_group / RUN_GROUP
+    """A minimal test_unified.csv for one source group, in its `{grid}.{source_group}` dir."""
+    d = root / f'{RUN_GROUP}.{src_group}'
     d.mkdir(parents=True)
     pd.DataFrame([
         {'target_lang': lang, 'seen': flag,
