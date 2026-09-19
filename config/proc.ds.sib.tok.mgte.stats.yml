@@ -10,7 +10,7 @@
 #       length distribution.
 #   tokenize.save_as: false
 #       The real config sets `huggingface`, and dataset.py:500-502 then WRITES
-#       to artefacts/.../{lang}/tokenized|{org}|{model}/. Left on, this script
+#       to artefacts/.../{lang}/tokenized--{org}--{model}/. Left on, this script
 #       would overwrite the exact tokenized splits grids 19a/19b trained and
 #       evaluated on -- with untruncated data -- and silently invalidate them.
 #

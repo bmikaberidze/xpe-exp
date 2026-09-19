@@ -27,9 +27,9 @@ matrix:
   # 0: XPE @ paper LR (5e-5) — adapter from 3_full_aya task_id=0
   - run_name: replay_xpe_lr5e5
     adapter_uuid4: 75f83d86-f8a4-48bf-85b8-04c38ce54abe
-    adapter_path: /fscratch/bmikaberidze/xpe-exp/artefacts/models/aya/CohereLabs/aya-expanse-8b/mcqa_ftp/75f83d86-f8a4-48bf-85b8-04c38ce54abe_CohereLabs|aya-expanse-8b_2955996_0_mcqa|xstory_cloze_ftp|en|tokenized|CohereLabs|aya-expanse-8b_10_32
+    adapter_path: /fscratch/bmikaberidze/xpe-exp/artefacts/models/aya/CohereLabs/aya-expanse-8b/mcqa_ftp/75f83d86-f8a4-48bf-85b8-04c38ce54abe_CohereLabs|aya-expanse-8b_2955996_0_mcqa|xstory_cloze_ftp|en|tokenized--CohereLabs--aya-expanse-8b_10_32
 
   # 1: SPT @ paper LR (5e-3) — adapter from 3_full_aya task_id=1
   - run_name: replay_spt_lr5e3
     adapter_uuid4: 1ed0635f-8f9f-47af-ad78-ee63fa6a14d0
-    adapter_path: /fscratch/bmikaberidze/xpe-exp/artefacts/models/aya/CohereLabs/aya-expanse-8b/mcqa_ftp/1ed0635f-8f9f-47af-ad78-ee63fa6a14d0_CohereLabs|aya-expanse-8b_2955994_1_mcqa|xstory_cloze_ftp|en|tokenized|CohereLabs|aya-expanse-8b_10_32
+    adapter_path: /fscratch/bmikaberidze/xpe-exp/artefacts/models/aya/CohereLabs/aya-expanse-8b/mcqa_ftp/1ed0635f-8f9f-47af-ad78-ee63fa6a14d0_CohereLabs|aya-expanse-8b_2955994_1_mcqa|xstory_cloze_ftp|en|tokenized--CohereLabs--aya-expanse-8b_10_32

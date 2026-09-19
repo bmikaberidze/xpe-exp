@@ -60,9 +60,9 @@ model:
     architecture: aya
     pretrained:
         cls: AutoModelForCausalLM
-        args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
+        args:                       # extra kwargs splatted into from_pretrained, e.g. dtype, device_map
             # fp32 weights for paper-faithful XPE/SPT/dual training (smoke variants use bf16).
-            # torch_dtype: bfloat16
+            # dtype: bfloat16
             # device_map: auto
         name: CohereLabs/aya-expanse-8b
         source: huggingface # null | local | huggingface
@@ -89,7 +89,7 @@ tokenizer:
 ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
-    dirs: mcqa/xstory_cloze_ftp/en/tokenized|CohereLabs|aya-expanse-8b
+    dirs: mcqa/xstory_cloze_ftp/en/tokenized--CohereLabs--aya-expanse-8b
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     splits:
@@ -187,8 +187,6 @@ training_args:
         save_strategy: steps # no / steps / epoch / best
         save_steps: 100
         save_total_limit: 1
-        save_safetensors: true
-        overwrite_output_dir: true
         push_to_hub: false
 
         # Loading Best Model
@@ -209,7 +207,7 @@ training_args:
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2
-        warmup_ratio: 0.1
+        warmup_steps: 0.1  # < 1 is a ratio of total steps
         weight_decay: 0.0  # SPT soft prompt: paper says no wd for the prompt embeddings
         max_grad_norm: 1.0
 
@@ -219,7 +217,7 @@ training_args:
         # dataloader_persistent_workers: true # default: False - Whether to use persistent workers for the dataloader
 
         # Grouping
-        group_by_length: true # Whether to group samples by length or not while batching
+        train_sampling_strategy: group_by_length
         length_column_name: length
 
         # Others

@@ -279,13 +279,13 @@ artefacts/                       # ALL data + outputs (datasets live here, not d
   datasets/benchmarks/topic/sib200/          # SIB-200; official splits, NO folds
     {lang}/                                  # 205 langs
       {train,validation,test}/               # 701 / 99 / 204
-      tokenized|{org}|{model}/               # e.g. tokenized|microsoft|mdeberta-v3-base
+      tokenized--{org}--{model}/               # e.g. tokenized--microsoft--mdeberta-v3-base
   datasets/benchmarks/mcqa/{xstory_cloze_ftp,belebele_ftp}/
     {lang}/                                  # e.g. eng_Latn; 122 langs for belebele_ftp
       {train,validation,test}/               # unfolded root splits
-      tokenized|{org}|{model}/               # e.g. tokenized|CohereLabs|aya-expanse-8b
+      tokenized--{org}--{model}/               # e.g. tokenized--CohereLabs--aya-expanse-8b
       fold{0,1,2}/                           # item-disjoint self-split (train500/val100/test300)
-        {train,validation,test}/  +  tokenized|{org}|{model}/
+        {train,validation,test}/  +  tokenized--{org}--{model}/
   models/{family}/{org}/{model}/mcqa_ftp/{uuid}_.../   # saved PEFT adapters
   evals/runs/{uuid}_...                       # single eval runs
   evals/xlt_runs/{llm}/{src_tag}/{run_group}/{timeid}_{run_name}/   # XLT tune/test runs
@@ -293,7 +293,11 @@ artefacts/                       # ALL data + outputs (datasets live here, not d
 ```
 
 Key conventions:
-- Dataset `ds.dirs` (e.g. `mcqa/belebele_ftp/eng_Latn/fold0/tokenized|...`) is a **template**:
+- **Dataset folders use `--`, never `|`** (`tokenized--{org}--{model}`, since 2026-09-19).
+  datasets ≥4 turns cache paths into regexes when `map()` looks for old cache files; `|` is
+  regex alternation, so a second run over a `|` folder crashes (`int(None)`). The old names
+  remain as symlinks for the pre-micm-nlp-0.4 era; migration: `scripts/datasets/migrate_pipe_dirs.py`.
+- Dataset `ds.dirs` (e.g. `mcqa/belebele_ftp/eng_Latn/fold0/tokenized--...`) is a **template**:
   the `{lang}` segment is swapped per `--source-group`/`--source-langs` lang and concatenated
   (see [[project_xlt_seen_unseen_assembly]]); `--fold N` swaps the `fold{N}` segment.
 - `src_tag` in xlt_runs = the source-group name (or joined source langs, or `zero`).

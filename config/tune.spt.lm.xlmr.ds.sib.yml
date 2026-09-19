@@ -92,7 +92,7 @@ ds:
     category: benchmarks # benchmarks | corpora | collections | raw
     # `eng_Latn` is the literal default; run_xlt swaps segment index 2 per
     # source/target language. SIB-200 has no folds -- never pass --fold.
-    dirs: topic/sib200/eng_Latn/tokenized|FacebookAI|xlm-roberta-large
+    dirs: topic/sib200/eng_Latn/tokenized--FacebookAI--xlm-roberta-large
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     splits:
@@ -218,8 +218,6 @@ training_args:
         save_strategy: epoch # no / steps / epoch / best
         save_steps: null
         save_total_limit: 1
-        save_safetensors: true
-        overwrite_output_dir: true
         push_to_hub: false
 
         # Loading Best Model
@@ -242,7 +240,7 @@ training_args:
         lr_scheduler_type: cosine_with_restarts
         lr_scheduler_kwargs:
             num_cycles: 2
-        warmup_ratio: 0.1
+        warmup_steps: 0.1  # < 1 is a ratio of total steps
         # 0.01, from the legacy YAML AND xpe_utils' source_training branch.
         # xpe.pdf sec. 4.4 says 0.1; the code that produced the numbers says
         # 0.01, and the code wins.
@@ -250,7 +248,7 @@ training_args:
         max_grad_norm: 1.0
 
         # Grouping
-        group_by_length: true
+        train_sampling_strategy: group_by_length
         length_column_name: length
 
         # Others

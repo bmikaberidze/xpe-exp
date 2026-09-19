@@ -53,7 +53,7 @@ ds:
     category: benchmarks # benchmarks | corpora | collections | raw
     # `eng_Latn` is the literal default; run_xlt swaps segment index 2 per
     # source/target language. SIB-200 has no folds -- never pass --fold.
-    dirs: topic/sib200/eng_Latn/tokenized|microsoft|mdeberta-v3-base
+    dirs: topic/sib200/eng_Latn/tokenized--microsoft--mdeberta-v3-base
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     splits:
@@ -145,14 +145,12 @@ training_args:
 
         # Saving
         save_strategy: 'no' # no / steps / epoch / best
-        save_safetensors: true
-        overwrite_output_dir: true
         push_to_hub: false
 
 
 
         # Grouping
-        group_by_length: true
+        train_sampling_strategy: group_by_length
         length_column_name: length
 
         # Others

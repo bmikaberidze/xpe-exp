@@ -63,11 +63,11 @@ model:
     architecture: bloom
     pretrained:
         cls: AutoModelForCausalLM
-        args:                       # extra kwargs splatted into from_pretrained, e.g. torch_dtype, device_map
-            # torch_dtype: bfloat16
+        args:                       # extra kwargs splatted into from_pretrained, e.g. dtype, device_map
+            # dtype: bfloat16
             # device_map: auto
         # BLOOMZ-7b1: instruction-tuned BLOOM, byte-for-byte same tokenizer as
-        # bloom-7b1 (so the `tokenized|bigscience|bloom-7b1` dirs are reused).
+        # bloom-7b1 (so the `tokenized--bigscience--bloom-7b1` dirs are reused).
         name: bigscience/bloomz-7b1
         source: huggingface # null | local | huggingface
         checkpoint: null
@@ -88,7 +88,7 @@ ds:
     # Belebele self-split fold. `fold0` is the literal default; run_xlt_meta's
     # `--fold N` swaps this segment (parts[3]) to fold{N}. The fold's DatasetDict
     # carries train (500) / validation (100) / test (300) item-disjoint splits.
-    dirs: mcqa/belebele_ftp/eng_Latn/fold0/tokenized|bigscience|bloom-7b1
+    dirs: mcqa/belebele_ftp/eng_Latn/fold0/tokenized--bigscience--bloom-7b1
     name: null
     type: huggingface_saved # text | csv | huggingface_saved | huggingface
     splits:
@@ -193,8 +193,6 @@ training_args:
         save_strategy: steps # no / steps / epoch / best
         save_steps: 100
         save_total_limit: 1
-        save_safetensors: true
-        overwrite_output_dir: true
         push_to_hub: false
 
         # Loading Best Model
@@ -213,12 +211,12 @@ training_args:
             warmup_init: false       # only meaningful when relative_step=true
         learning_rate: 1.0   # SPT-part winner from 9c (WD=0); XPE-part lr=2e-3 set in optimizer_grouped_parameters
         lr_scheduler_type: cosine
-        warmup_ratio: 0.1
+        warmup_steps: 0.1  # < 1 is a ratio of total steps
         weight_decay: 0.0  # base = SPT part: no WD (XPE part WD in optimizer_grouped_parameters)
         max_grad_norm: 1.0
 
         # Grouping
-        group_by_length: true # Whether to group samples by length or not while batching
+        train_sampling_strategy: group_by_length
         length_column_name: length
 
         # Others

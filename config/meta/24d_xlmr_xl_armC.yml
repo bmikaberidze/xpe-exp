@@ -30,7 +30,7 @@
 #   - tune/test configs are the existing xlmr ones; the backbone is swapped per entry
 #     via `model.pretrained.name` + `tokenizer.name` overrides.
 #   - `peft.encoder_hidden_size` follows the repo's hidden/4 rule: 640 for xlm-roberta-xl.
-#   - The tokenized SIB-200 data under `tokenized|FacebookAI|xlm-roberta-large` is
+#   - The tokenized SIB-200 data under `tokenized--FacebookAI--xlm-roberta-large` is
 #     VALID FOR ALL THREE SIZES: base, large and XL share a byte-identical tokenizer
 #     (md5 a530638f6673270f, 250002 tokens). XL's config advertises vocab_size 250880,
 #     but that is tensor-core PADDING, not a different vocabulary. Verified, not assumed.
