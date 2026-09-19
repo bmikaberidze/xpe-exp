@@ -93,6 +93,29 @@ sbatch --array=0-59%10 --mem=30G runtime/clusters/pegasus/shell/run.sh --site-pa
   "python -m scripts.run_xlt_meta --meta-config ... --test-config ... --source-group ..."
 ```
 
+### Eras (since 2026-09-18)
+
+`run.sh [--era <name>] [--site-packages] [--no-gpu] "<cmd>"` picks one stack: image +
+packages mount (`/fscratch/bmikaberidze/site-packages.<era>`). **`--era` must come
+first** (flags are positional). Default is the current era.
+
+| era | stack | code |
+|---|---|---|
+| `micm-nlp-0.5` (default) | torch 2.14 / CUDA 13.4 (sm_100: B200 works), transformers 5.17, peft 0.21, datasets 5, py3.12 | micm-nlp **v0.5.0**, xpe-exp `main` |
+| `pre-micm-nlp-0.4` (frozen) | torch 2.5 (sm_90 max), transformers 4.49, peft 0.14, py3.10 | xpe-exp tag `pre-micm-nlp-0.4` -- produced everything under `artefacts/evals/xlt_runs/` |
+
+- The mount holds micm-nlp **installed editable** from the sibling checkout; after a
+  version bump, refresh its metadata inside a job
+  (`python -m pip install -q --no-deps -e /fscratch/bmikaberidze/micm-nlp`), or
+  `info.json` records the old version.
+- **New-era configs set `model.pretrained.args.dtype` and `training_args.args.optim`
+  explicitly**: transformers 5 loads a checkpoint in its own dtype (`"auto"`, bf16 for
+  Aya) and defaults to `adamw_torch_fused`; transformers 4 used float32 and `adamw_torch`.
+- Real jobs download HF models online into the container's own cache (no `HF_HOME`);
+  don't set `HF_HUB_OFFLINE` in a job.
+- 0.4.x adapters load unchanged on 0.5.0 (verified bit-identical, 16 Aya/Bloomz
+  adapters); a replayed Aya adapter reproduced its stored accuracies to ±0.01.
+
 ### The rules
 
 - **CPU-only jobs must pin the CPU partitions themselves:**
@@ -151,7 +174,7 @@ VRAM groups (see the reference table at the bottom of `run.sh`):
 - **Bloomz-7b1 fits in 80 GB** → default partition is fine, no override needed.
 - **The SIB-200 encoders (`mdeberta`, `mgte`) are base-size** → they need no big-VRAM
   node, BUT see the B200 note below: they must still pin a partition.
-- **mDeBERTa CANNOT run on B200.** DeBERTa-v2 compiles `build_relative_position` with
+- **mDeBERTa CANNOT run on B200 -- in the `pre-micm-nlp-0.4` era.** DeBERTa-v2 compiles `build_relative_position` with
   `@torch.jit.script`, and this container's NVRTC does not know Blackwell (sm_100):
   `RuntimeError: nvrtc: error: invalid value for --gpu-architecture (-arch)`.
   Verified 2026-08-05: serv-3310 (H100) trained fine, serv-3324 (B200) failed. The

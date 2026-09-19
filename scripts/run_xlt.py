@@ -385,7 +385,7 @@ def parse_args():
 
 
 def swap_lang_in_dirs(dirs_template: str, lang: str) -> str:
-    # ds.dirs shape: '<category_group>/<benchmark>/<lang>/tokenized|<vendor>|<model>'
+    # ds.dirs shape: '<category_group>/<benchmark>/<lang>/tokenized--<vendor>--<model>'
     # (Belebele fold dirs add a 'fold<N>' segment after <lang>; <lang> stays at
     # index 2, so this swap is unaffected by the fold segment.)
     parts = dirs_template.split('/')
@@ -400,7 +400,7 @@ def apply_fold(dirs_template: str, fold: int | None) -> str:
     """Aim a Belebele self-split config at a specific fold at runtime.
 
     Belebele fold dirs carry a literal 'fold<N>' segment, e.g.
-    '.../eng_Latn/fold0/tokenized|...'. With `fold` given, that segment is
+    '.../eng_Latn/fold0/tokenized--...'. With `fold` given, that segment is
     rewritten to 'fold<fold>'. `fold=None` is a no-op (leaves the config's
     literal default, and leaves fold-less paths like xstory_cloze untouched).
     Passing a fold to a fold-less path is a user error and raises.
@@ -464,7 +464,7 @@ def discover_target_langs(test_config, exclude=()):
     parts = test_config.ds.dirs.split('/')
     benchmark_rel = '/'.join(parts[:2])
     # Everything after the <lang> segment (parts[2]) is the per-lang subpath.
-    # 4-part xsc => 'tokenized|...'; 5-part bebe fold => 'fold<N>/tokenized|...'.
+    # 4-part xsc => 'tokenized--...'; 5-part bebe fold => 'fold<N>/tokenized--...'.
     lang_subpath = '/'.join(parts[3:])
     search_root = Path(datasets_dir()) / test_config.ds.category / benchmark_rel
     langs = []
