@@ -66,12 +66,15 @@ def _with_fold_axis(df: pd.DataFrame) -> pd.DataFrame:
     return df.assign(fold=0)
 
 
-def aggregate(df: pd.DataFrame, group_key: str = 'learning_rate') -> pd.DataFrame:
-    """Mean +/- std (ddof=1) across seeds per (method, group_key, fold).
+def aggregate(df: pd.DataFrame, group_key: str | None = None) -> pd.DataFrame:
+    """Mean +/- std (ddof=1) across seeds per (method, [group_key,] fold).
 
-    `fold` is optional: fold-less benchmarks collapse to a single fold 0.
+    `group_key` is the swept hyperparameter of a search (e.g. `learning_rate`, which
+    the group entries must then carry as a column); a grid has none, so its cells are
+    (method, fold). `fold` is optional: fold-less benchmarks collapse to fold 0.
     """
-    missing = {'method', 'seed', 'best_val_acc', group_key} - set(df.columns)
+    keys = ['method', *([group_key] if group_key else []), 'fold']
+    missing = {'method', 'seed', 'best_val_acc', *keys} - {'fold'} - set(df.columns)
     if missing:
         raise ValueError(f'valid_res rows missing columns: {sorted(missing)} '
                          f'(have {list(df.columns)})')
@@ -83,7 +86,7 @@ def aggregate(df: pd.DataFrame, group_key: str = 'learning_rate') -> pd.DataFram
     # counts every seed exactly once. (LR-search runs are unique per lr, so this
     # is a no-op there.)
     before = len(df)
-    df = df.drop_duplicates(subset=['method', group_key, 'fold', 'seed'], keep='last')
+    df = df.drop_duplicates(subset=[*keys, 'seed'], keep='last')
     dropped = before - len(df)
     if dropped:
         # A crashed run and its re-run legitimately collide. But if MOST rows
@@ -91,8 +94,8 @@ def aggregate(df: pd.DataFrame, group_key: str = 'learning_rate') -> pd.DataFram
         # on `learning_rate` while the sweep actually varied `prompt_lr` -- and
         # the result would silently be an average over a near-arbitrary subset.
         msg = (f'note: dropped {dropped}/{before} duplicate rows on '
-               f"['method', {group_key!r}, 'fold', 'seed'] (crashed runs + re-runs)")
-        if dropped > before / 2:
+               f'{[*keys, "seed"]} (crashed runs + re-runs)')
+        if group_key and dropped > before / 2:
             raise ValueError(
                 f'{msg}\n'
                 f'That is more than half the rows, so {group_key!r} is probably CONSTANT '
@@ -101,26 +104,29 @@ def aggregate(df: pd.DataFrame, group_key: str = 'learning_rate') -> pd.DataFram
                 f'--group-by prompt_lr.')
         print(msg)
     rows = []
-    for (method, key, fold), x in df.groupby(['method', group_key, 'fold']):
+    for cell, x in df.groupby(keys):
         rows.append({
-            'method': method, group_key: key, 'fold': fold,
+            **dict(zip(keys, cell)),
             'n_seeds': len(x),
             'mean_val_acc': x['best_val_acc'].mean(),
             'seed_std': x['best_val_acc'].std(ddof=1),
         })
     out = pd.DataFrame(rows)
-    return out.sort_values(['method', 'fold', group_key]).reset_index(drop=True)
+    return out.sort_values(['method', 'fold', *([group_key] if group_key else [])]).reset_index(drop=True)
 
 
-def _warn_incomplete(out: pd.DataFrame, group_key: str) -> None:
+def _warn_incomplete(out: pd.DataFrame, group_key: str | None) -> None:
     full = out['n_seeds'].max()
     bad = out[out['n_seeds'] < full]
     if len(bad):
         print(f'warning: {len(bad)} cells have fewer than {full} seeds (incomplete):')
-        print(bad[['method', group_key, 'fold', 'n_seeds']].to_string(index=False))
+        print(bad[['method', *([group_key] if group_key else []), 'fold', 'n_seeds']].to_string(index=False))
 
 
-def _print_best(out: pd.DataFrame, group_key: str) -> None:
+def _print_best(out: pd.DataFrame, group_key: str | None) -> None:
+    if not group_key:
+        print(out.to_string(index=False))
+        return
     print(f'\nbest {group_key} per (method, fold) by mean val acc:')
     for (method, fold), x in out.groupby(['method', 'fold']):
         top = x.loc[x['mean_val_acc'].idxmax()]
@@ -133,8 +139,9 @@ def _print_best(out: pd.DataFrame, group_key: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('path', type=Path, help='group directory to walk for validation results')
-    ap.add_argument('--group-by', default='learning_rate',
-                    help='swept-hyperparameter column to group on (default: learning_rate)')
+    ap.add_argument('--group-by', default=None,
+                    help='swept-hyperparameter column of a search, e.g. learning_rate '
+                         '(default: none -- a grid, cells are method x fold)')
     ap.add_argument('--out', type=Path, default=None,
                     help='output CSV (default: PATH/valid_unified.csv)')
     args = ap.parse_args()

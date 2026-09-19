@@ -92,7 +92,7 @@ def _valid_rows(fold=None):
 
 def test_aggregate_without_fold_column():
     """SIB-200 runs have seeds but no folds; aggregation must still work."""
-    out = aggregate(_valid_rows())
+    out = aggregate(_valid_rows(), group_key='learning_rate')
     assert len(out) == 2                      # one cell per learning_rate
     assert set(out['n_seeds']) == {2}
     best = out.loc[out['mean_val_acc'].idxmax()]
@@ -104,16 +104,29 @@ def test_aggregate_with_all_nan_fold_column():
     """run_xlt writes fold=None for SIB, which reads back as NaN."""
     df = _valid_rows()
     df['fold'] = float('nan')
-    out = aggregate(df)
+    out = aggregate(df, group_key='learning_rate')
     assert len(out) == 2
     assert set(out['n_seeds']) == {2}
 
 
 def test_aggregate_still_separates_real_folds():
     df = pd.concat([_valid_rows(fold=0), _valid_rows(fold=1)], ignore_index=True)
-    out = aggregate(df)
+    out = aggregate(df, group_key='learning_rate')
     assert len(out) == 4                      # 2 lrs x 2 folds, kept separate
     assert sorted(out['fold'].unique()) == [0, 1]
+
+
+def test_a_grid_groups_by_method_and_fold_only():
+    """A grid sweeps nothing: without --group-by the cells are (method, fold)."""
+    df = pd.DataFrame([
+        {'method': m, 'fold': 0, 'seed': seed, 'best_val_acc': acc}
+        for m, accs in (('spt', (0.70, 0.80)), ('xpe', (0.60, 0.90)))
+        for seed, acc in zip((10, 11), accs)
+    ])
+    out = aggregate(df)
+    assert list(out.columns[:2]) == ['method', 'fold']
+    assert list(out['n_seeds']) == [2, 2]
+    assert list(out['mean_val_acc']) == pytest.approx([0.75, 0.75])
 
 
 # --- guard against grouping on a constant column ----------------------------
