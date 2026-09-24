@@ -106,7 +106,15 @@ def run(config, ctx):
     :returns: the test phase's ``RunOutput`` -- its ``results`` hold one row per
         target language.
     """
-    langs = source_langs(ctx.entry)
+    # A bare zero-shot baseline has no source languages -- nothing was tuned, so
+    # nothing is "seen" and every language is a target. Only that shape may omit
+    # `source_group:`; tuning and replay still require it (replay must exclude the
+    # langs its adapter was tuned on).
+    if ctx.test_config is None and not ctx.entry.get('adapter') \
+            and 'source_group' not in ctx.entry:
+        langs = []
+    else:
+        langs = source_langs(ctx.entry)
     fold = ctx.entry.get('fold')
 
     if ctx.test_config is None:            # replay or zero-shot: `config` is the test config

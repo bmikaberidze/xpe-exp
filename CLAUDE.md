@@ -86,7 +86,9 @@ only interpreter whose output counts. This covers dataset downloads, tokenizatio
 probes, training, evaluation, unify/aggregate and pytest.
 
 ```
-sbatch --array=0 --mem=30G --wait runtime/clusters/pegasus/shell/run.sh --site-packages --no-gpu \
+sbatch --array=0 --mem=30G --wait --gpus=0 \
+  --partition=RTXA6000,RTX3090,batch,L40S,V100-32GB \
+  runtime/clusters/pegasus/shell/run.sh --site-packages --no-gpu \
   "python -m pytest tests/ -q"
 
 sbatch --array=0-59%10 --mem=30G runtime/clusters/pegasus/shell/run.sh --site-packages \
@@ -120,10 +122,17 @@ first** (flags are positional). Default is the current era.
 
 - **CPU-only jobs must pin the CPU partitions themselves:**
   `--partition=RTXA6000,RTX3090,batch,L40S,V100-32GB` (the list `--no-gpu` sets at
-  `run.sh:69`). `--no-gpu` only lowers memory and asks for 0 GPUs in SBATCH mode —
-  that PARTITION variable is used **only** by interactive mode (`run.sh:108`), so
-  without the pin the `#SBATCH` GPU list at `run.sh:4` applies, which includes
-  `H100-Trails` (not permitted for this uid → the job sits PENDING).
+  `run.sh:69`). That PARTITION variable is used **only** by interactive mode
+  (`run.sh:108`), so without the pin the `#SBATCH` GPU list at `run.sh:4` applies,
+  which includes `H100-Trails` (not permitted for this uid → the job sits PENDING).
+- **CPU-only jobs must ALSO pass `--gpus=0` on the `sbatch` CLI.** In SBATCH mode
+  `--no-gpu` does **not** release the GPU: it lowers `MEMORY`, sets `GPUS=0` and
+  prints "Running without GPU", but `--gpus=$GPUS` only ever reaches `srun` through
+  `SRUN_ARGS`, which is built **inside the interactive branch** (`run.sh:136`). In
+  batch mode `SRUN_ARGS` is empty and the job keeps the `#SBATCH --gpus=1` directive
+  (`run.sh:7`). Only the `sbatch` CLI overrides a directive. Verified 2026-09-23:
+  Peggy flagged job 3432106 (Belebele tokenization, pure CPU) for holding GPU 4 on
+  `gifu` idle for 2 h 36 m. Every CPU-only job before this did the same.
   **Running `run.sh` directly is not an alternative from an agent session**: this
   shell is itself inside a small SLURM allocation (`SLURM_JOB_ID` is set, ~4G), so
   `run.sh` takes the SBATCH branch and its `srun` becomes a step of *that* job —

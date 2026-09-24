@@ -1,0 +1,62 @@
+# 25_bebe_zeroshot -- direct inference (no tuning, no adapter) of every decoder we can
+# run today: the two reproduction probes (Aya, BLOOMZ) plus every Gemma
+# checkpoint that fits the CURRENT architecture. Scored on the unfolded 900-item Belebele
+# test split of all 122 languages. One row per language per model: the per-language
+# ceiling each backbone brings before any prompt tuning.
+#
+# Why one group: every run answers the same question with the same data, so unify +
+# aggregate give ONE table (languages x model variants). The two unit configs differ
+# only by which generation's tokenized dirs they read.
+#
+# Shape: no `separate_test:` and no `adapter:` -> xlt_runner treats `config` as the
+# test config and runs it as-is (`test.zero_shot_only: true`). These entries also
+# omit `source_group:`, which marks them as the bare baseline: no language is
+# excluded, so all 122 are targets.
+#
+# Gemma naming: Gemma 3 uses `-pt` (base) / `-it`; Gemma 4 uses NO suffix for base
+# (google/gemma-4-12B) / `-it`. Verified against the hub 2026-09-24.
+#
+# Dispatch. `--mem` is HOST RAM, not VRAM -- the model is materialised on CPU
+# before it moves to the GPU, so host RAM must hold the weights in the LOAD dtype
+# plus the ~10 GB container unpack. VRAM (bf16): 1b~2, 4b~9, 12b~24, 27b~54,
+# 26B-A4B~52, 31B~62 GB; Aya and BLOOMZ load fp32 here, so ~32 and ~28 GB.
+# MEASURED: 64G OOMs on fp32 Aya/BLOOMZ at model setup (job 3435662); the pre-0.4
+# zero-shot ran at 80G, so use >=100G for the fp32 probes. bf16 Gemma <=12B is far
+# cheaper (~24 GB weights), but keep 100G unless a run proves less is safe.
+#   sbatch --array=0-1%2 --mem=100G \     # probes first: indices 0-1
+#   sbatch --array=2-9%3 --mem=100G \     # then the Gemma rows
+#     --partition=H100,A100-80GB,H200,H200-PCI,H100-PCI \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m micm_nlp run-group \
+#          --group-config config/groups/25_bebe_zeroshot.yml \
+#          --runner scripts.xlt_runner:run \
+#          --root-path /fscratch/bmikaberidze/xpe-exp"
+
+configs:
+  aya:   ../units/test.lm.aya.ds.bebe.yml
+  bloom: ../units/test.lm.bloomz-7b1.ds.bebe.yml
+  g3: ../units/test.lm.g3.ds.bebe.yml
+  g4: ../units/test.lm.g4.ds.bebe.yml
+
+runs:
+
+  # ===== REPRODUCTION PROBES (array indices 0-1): known answers.
+  # Old numbers: artefacts/evals/xlt_runs/{aya,bloom}/zero/ -- 122 langs, pre-0.4,
+  # transformers 4. These two rerun the same items under TF5 and must match; run
+  # and check them BEFORE the Gemma rows, which have no reference value.
+  - {config: aya,   name: probe_aya_zs,   llm: aya,   variant: probe}
+  - {config: bloom, name: probe_bloom_zs, llm: bloom, variant: probe}
+
+  # ===== Gemma 3 (base) =====
+  - {config: g3, name: g3_1b_pt,  llm: gemma3-1b,  size: 1b,  variant: base, overrides: {model.pretrained.name: google/gemma-3-1b-pt}}
+  - {config: g3, name: g3_4b_pt,  llm: gemma3-4b,  size: 4b,  variant: base, overrides: {model.pretrained.name: google/gemma-3-4b-pt}}
+  - {config: g3, name: g3_12b_pt, llm: gemma3-12b, size: 12b, variant: base, overrides: {model.pretrained.name: google/gemma-3-12b-pt}}
+
+  # ===== Gemma 3 (instruction-tuned) =====
+  - {config: g3, name: g3_1b_it,  llm: gemma3-1b,  size: 1b,  variant: it, overrides: {model.pretrained.name: google/gemma-3-1b-it}}
+  - {config: g3, name: g3_4b_it,  llm: gemma3-4b,  size: 4b,  variant: it, overrides: {model.pretrained.name: google/gemma-3-4b-it}}
+  - {config: g3, name: g3_12b_it, llm: gemma3-12b, size: 12b, variant: it, overrides: {model.pretrained.name: google/gemma-3-12b-it}}
+
+  # ===== Gemma 4 (12B; base has NO suffix) =====
+  - {config: g4, name: g4_12b_base, llm: gemma4-12B, size: 12B, variant: base, overrides: {model.pretrained.name: google/gemma-4-12B}}
+  - {config: g4, name: g4_12b_it,   llm: gemma4-12B, size: 12B, variant: it,   overrides: {model.pretrained.name: google/gemma-4-12B-it}}
