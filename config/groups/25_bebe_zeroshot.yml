@@ -35,6 +35,7 @@
 configs:
   aya:   ../units/test.lm.aya.ds.bebe.yml
   bloom: ../units/test.lm.bloomz-7b1.ds.bebe.yml
+  bloombase: ../units/test.lm.bloom-7b1.ds.bebe.yml
   g3: ../units/test.lm.g3.ds.bebe.yml
   g4: ../units/test.lm.g4.ds.bebe.yml
 
@@ -60,3 +61,7 @@ runs:
   # ===== Gemma 4 (12B; base has NO suffix) =====
   - {config: g4, name: g4_12b_base, llm: gemma4-12B, size: 12B, variant: base, overrides: {model.pretrained.name: google/gemma-4-12B}}
   - {config: g4, name: g4_12b_it,   llm: gemma4-12B, size: 12B, variant: it,   overrides: {model.pretrained.name: google/gemma-4-12B-it}}
+
+  # ===== appended 2026-09-24: BLOOM base, for the base/it contrast on BLOOM too.
+  # (Additive only -- indices 0-9 already ran and must not move.)
+  - {config: bloombase, name: bloom_base_zs, llm: bloom-7b1, variant: base}
