@@ -1,0 +1,168 @@
+# ARCHIVE unit for grid 10a_lr_search_bebe_aya (spt). GENERATED -- do not edit.
+# = config/units/tune.spt.lm.aya.ds.bebe.yml + the keys below, which is what
+#   the old runs actually used (their wandb config.yaml; folds [0]).
+# Generator: scripts/gen_archive_units.py (2026-09-30).
+# Differences from the current unit:
+#   custom_training_args.early_stopping_metric: None
+#   ds.splits.test: False
+#   eval.after_training_on_test: False
+#   training_args.args.max_steps: 4000
+
+mode: finetune
+task:
+  id: null
+  category: text_generation
+  name: mcqa_ftp
+  metric_groups:
+  - metrics:
+    - accuracy
+  preproc_rules:
+    flatten: true
+    filter_padded: true
+    label_id_to_name: false
+    filter_by_prefixes: false
+    decode: false
+    label_name_strip_lower: false
+    label_name_to_float: false
+    label_name_to_id: false
+    verify_labels_match: true
+    calc_confusion_matrix: false
+    prediction_axis: -1
+    label_restricted_likelihood: true
+peft:
+  peft_type: XPE
+  task_type: CAUSAL_LM
+  num_virtual_tokens: 20
+  encoder_reparameterization_type: NONE
+  encoder_hidden_size: 1024
+  encoder_num_layers: 2
+  encoder_dropout: 0.1
+  encoder_ratio: 0
+  encoder_input_size: null
+  encoder_init_state_dict_path: null
+  encoder_freeze: false
+  encoder_embedding_freeze: false
+  encoder_embedding_init_type: hf_default
+  encoder_embedding_normalize: null
+  encoder_embedding_normalize_max_norm: null
+model:
+  architecture: aya
+  pretrained:
+    cls: AutoModelForCausalLM
+    args:
+      dtype: float32
+    name: CohereLabs/aya-expanse-8b
+    source: huggingface
+    checkpoint: null
+    adapter: null
+tokenizer:
+  source: huggingface
+  name: CohereLabs/aya-expanse-8b
+  type: null
+  algorithm: null
+  adapt_to_lm: false
+  args:
+    padding_side: right
+ds:
+  descriptive_name: null
+  category: benchmarks
+  dirs: mcqa/belebele_ftp/eng_Latn/fold0/tokenized--CohereLabs--aya-expanse-8b
+  name: null
+  type: huggingface_saved
+  splits:
+    train: true
+    test: false
+    validation: true
+  input:
+    key: text
+    standardize_key: true
+  label:
+    key: answer_label
+    standardize_key: true
+    names:
+    - A
+    - B
+    - C
+    - D
+  task_id: null
+  preproc_rules: null
+eval:
+  before_training: false
+  before_training_on_test: false
+  during_training: null
+  after_training: true
+  after_training_on_test: false
+  per_task: null
+  downstream_tasks: false
+test:
+  run: false
+  zero_shot: false
+  zero_shot_only: false
+  report_to_wandb: true
+trainer:
+  cls: Trainer
+data_collator:
+  cls: DataCollatorForSeq2Seq
+  args:
+    max_length: 4096
+    padding: longest
+    pad_to_multiple_of: 4
+    return_tensors: pt
+custom_training_args:
+  train_force_sequential: false
+  eval_force_sequential: true
+  test_force_sequential: true
+  early_stopping_after: 0.5
+  early_stopping_patience: 5
+  early_stopping_threshold: 0.0
+  early_stopping_metric: null
+  save_final_model: true
+  keep_only_final_model: true
+  random_task_exclusion: false
+  usable_columns:
+  - task_ids
+training_args:
+  cls: TrainingArguments
+  args:
+    num_train_epochs: 10
+    max_steps: 4000
+    per_device_train_batch_size: 2
+    gradient_accumulation_steps: 16
+    per_device_eval_batch_size: 2
+    eval_accumulation_steps: 1
+    logging_strategy: steps
+    logging_first_step: false
+    logging_steps: 50
+    report_to: wandb
+    eval_strategy: steps
+    eval_steps: 100
+    save_strategy: steps
+    save_steps: 100
+    save_total_limit: 1
+    push_to_hub: false
+    load_best_model_at_end: true
+    metric_for_best_model: accuracy
+    greater_is_better: true
+    optim: adafactor
+    optim_args:
+      beta1: null
+      decay_rate: -0.8
+      clip_threshold: 1.0
+      scale_parameter: false
+      relative_step: false
+      warmup_init: false
+    learning_rate: 0.5
+    lr_scheduler_type: cosine
+    warmup_steps: 0.1
+    weight_decay: 0
+    max_grad_norm: 1.0
+    train_sampling_strategy: group_by_length
+    length_column_name: length
+    full_determinism: false
+    bf16: true
+    fp16: false
+cuda:
+  empty_cache_steps: null
+env:
+  PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  TOKENIZERS_PARALLELISM: 'true'

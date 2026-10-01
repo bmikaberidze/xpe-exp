@@ -1,16 +1,12 @@
-"""Unit tests for named source-language groups and run-dir naming in run_xlt."""
+"""Unit tests for the named language groups in src/xlt_langs.py."""
 import pytest
-from types import SimpleNamespace
 
-from scripts.run_xlt import LANG_GROUPS, resolve_langs, src_tag_for
-from scripts.run_xlt import build_run_paths
+from src.xlt_langs import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
 JOSHI5 = ['eng_Latn', 'spa_Latn', 'deu_Latn', 'fra_Latn', 'jpn_Jpan', 'zho_Hans', 'arb_Arab']
 
-
 def test_joshi5_group_defined():
     assert LANG_GROUPS['joshi5'] == JOSHI5
-
 
 def test_bloom_seen_group():
     bloom_seen = LANG_GROUPS['bloom_seen']
@@ -27,8 +23,6 @@ def test_bloom_seen_group():
     # the 5 ROOTS langs absent from Belebele must not appear
     for absent in ('tum_Latn', 'kik_Latn', 'aka_Latn', 'fon_Latn', 'run_Latn'):
         assert absent not in bloom_seen
-    assert resolve_langs('bloom_seen', '') == bloom_seen
-
 
 def test_aya_seen_group():
     aya_seen = LANG_GROUPS['aya_seen']
@@ -40,42 +34,15 @@ def test_aya_seen_group():
     assert 'arb_Arab' in aya_seen and 'pes_Arab' in aya_seen
     for romanized in ('hin_Latn', 'urd_Latn', 'arb_Latn'):
         assert romanized not in aya_seen
-    assert resolve_langs('aya_seen', '') == aya_seen
 
-
-def test_resolve_group_name():
-    assert resolve_langs('joshi5', '') == JOSHI5
-
-
-def test_resolve_csv_when_no_group():
-    assert resolve_langs(None, 'en, ru ,zh') == ['en', 'ru', 'zh']
-
-
-def test_resolve_unknown_group_raises():
-    with pytest.raises(ValueError, match='joshi5'):  # message lists known groups
-        resolve_langs('nope', '')
-
-
-def test_resolve_both_set_raises():
-    with pytest.raises(ValueError, match='both'):
-        resolve_langs('joshi5', 'en,ru')
-
-
-def test_resolve_neither_set_returns_empty():
-    assert resolve_langs(None, '') == []
-
-
-def test_src_tag_uses_group_name():
-    assert src_tag_for('joshi5', sorted(JOSHI5)) == 'joshi5'
-
-
-def test_src_tag_falls_back_to_joined_sorted_langs():
-    assert src_tag_for(None, ['ar', 'en', 'zh']) == 'ar-en-zh'
-
-
-def test_src_tag_zero_when_empty():
-    assert src_tag_for(None, []) == 'zero'
-
+def test_aya_high_group():
+    aya_high = LANG_GROUPS['aya_high']
+    # top 50% of Belebele's 122 by Aya zero-shot accuracy
+    assert len(aya_high) == 61
+    assert len(set(aya_high)) == 61  # no duplicates
+    assert set(LANG_GROUPS['aya_seen']) <= set(aya_high)
+    assert set(JOSHI5) <= set(aya_high)
+    assert not set(aya_high) & set(LOW_PERF_LANG_GROUPS['aya'])
 
 # --- SIB-200 encoder groups (pinned to src/sib200_meta.py) -------------------
 
@@ -83,13 +50,11 @@ from src.sib200_meta import (
     LABEL_NAMES, MGTE_TOKENS_M, SIB200_LANGS, low_perf_langs, sib200_codes, xlmr_seen_langs,
 )
 
-
 def test_sib200_table_shape():
     assert len(SIB200_LANGS) == 205  # SIB-200 covers 205 language codes
     assert len(set(sib200_codes())) == 205
     # joshi5 must be derivable from the table's Joshi class column
     assert sorted(r['code'] for r in SIB200_LANGS if r['class'] == 5.0) == sorted(JOSHI5)
-
 
 def test_label_names_are_canonical_order():
     # https://huggingface.co/datasets/Davlan/sib200/raw/main/data/eng_Latn/labels.txt
@@ -99,7 +64,6 @@ def test_label_names_are_canonical_order():
         'sports', 'health', 'entertainment', 'geography',
     ]
 
-
 # LANG_GROUPS is the single runtime source of truth for source languages; these
 # tests only pin its literals against the metadata table so the two can't drift.
 @pytest.mark.parametrize('group,size', [('mdeberta_seen', 92), ('mgte_seen', 76),
@@ -108,13 +72,10 @@ def test_encoder_seen_groups_are_well_formed(group, size):
     langs = LANG_GROUPS[group]
     assert len(langs) == size
     assert len(set(langs)) == size  # no duplicates
-    assert resolve_langs(group, '') == langs
-
 
 def test_mgte_seen_matches_the_token_table():
     # membership in MGTE_TOKENS_M is what defines mGTE's pretraining set
     assert set(LANG_GROUPS['mgte_seen']) == set(MGTE_TOKENS_M)
-
 
 def test_mdeberta_seen_reproduces_paper_seen_92():
     # mDeBERTa-v3 trains on CC100 like XLM-R, so this group is taken to be the
@@ -122,7 +83,6 @@ def test_mdeberta_seen_reproduces_paper_seen_92():
     # assumption caveat in src/sib200_meta.py's docstring.
     assert set(LANG_GROUPS['mdeberta_seen']) == set(xlmr_seen_langs())
     assert len(xlmr_seen_langs()) == 92
-
 
 def test_xlmr_seen_is_the_paper_seen_92_by_definition():
     # XLM-R-large is the paper's own backbone, so this group IS the `xlmr`
@@ -132,21 +92,18 @@ def test_xlmr_seen_is_the_paper_seen_92_by_definition():
     # the mDeBERTa==XLM-R assumption is ever revised, only that group moves.
     assert LANG_GROUPS['xlmr_seen'] == LANG_GROUPS['mdeberta_seen']
 
-
 def test_xlmr_low_perf_is_the_full_46_and_not_borrowed():
     """The one low-perf group that is a measurement of its own backbone.
 
     xpe.pdf sec. 4.2 defines low-perf by full FT of XLM-R-large (<60%), so for
     'xlmr' the list is the definition. Nothing drops: it was derived from the
     same `xlmr` column that defines xlmr_seen, hence disjoint by construction."""
-    from scripts.run_xlt import LOW_PERF_LANG_GROUPS
 
     assert set(LOW_PERF_LANG_GROUPS['xlmr']) == set(low_perf_langs())
     assert len(LOW_PERF_LANG_GROUPS['xlmr']) == 46
     # identical to the borrowed mDeBERTa copy -- there it is a stand-in, here the
     # real thing; the equality is what makes 19a/21a rows comparable.
     assert set(LOW_PERF_LANG_GROUPS['xlmr']) == set(LOW_PERF_LANG_GROUPS['mdeberta'])
-
 
 def test_mgte_seen_relation_to_xlmr_seen():
     xlmr, mgte = set(xlmr_seen_langs()), set(LANG_GROUPS['mgte_seen'])
@@ -158,7 +115,6 @@ def test_mgte_seen_relation_to_xlmr_seen():
     # (nno_Latn vs the single `no` tag; azb_Arab vs the single `az` tag).
     assert len(xlmr - mgte) == 21
     assert set(MGTE_TOKENS_M) == mgte  # token counts cover exactly the seen set
-
 
 def test_low_perf_column_is_provenance_only():
     # The paper's XLM-R-derived Low-Performing group. Since 2026-08-11 it IS
@@ -172,7 +128,6 @@ def test_low_perf_column_is_provenance_only():
     assert len(set(xlmr_seen_langs()) - set(JOSHI5)) == 85
     assert len((set(sib200_codes()) - set(xlmr_seen_langs())) - set(lp)) == 67
 
-
 def test_low_perf_is_never_in_the_seen_set():
     """The core invariant: low-perf refines UNSEEN.
 
@@ -180,19 +135,16 @@ def test_low_perf_is_never_in_the_seen_set():
     raises if a lang is in both lists. Enforce it here for every backbone that
     has a low-perf group, so a future edit cannot reintroduce the clash.
     """
-    from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
     for llm, low_perf in LOW_PERF_LANG_GROUPS.items():
         seen = set(LANG_GROUPS[f'{llm}_seen'])
         clash = sorted(seen & set(low_perf))
         assert not clash, f'{llm}: low-perf langs also marked seen: {clash}'
 
-
 def test_encoder_low_perf_groups_are_the_borrowed_xlmr_list():
     """TEMPORARY: both encoder groups are the paper's XLM-R-large list, minus
     whatever that backbone actually pretrained on. Replace with a per-backbone
     measurement (in-language full FT) and this test changes with it."""
-    from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
     truth = set(low_perf_langs())
     for llm in ('mdeberta', 'mgte'):
@@ -205,31 +157,8 @@ def test_encoder_low_perf_groups_are_the_borrowed_xlmr_list():
     assert len(LOW_PERF_LANG_GROUPS['mgte']) == 45
     assert set(LOW_PERF_LANG_GROUPS['mdeberta']) - set(LOW_PERF_LANG_GROUPS['mgte']) == {'yor_Latn'}
 
-
 def test_all_seen_groups_are_sib200_codes():
     codes = set(sib200_codes())
     for group in ('mdeberta_seen', 'mgte_seen', 'xlmr_seen', 'joshi5', 'enarzho'):
         assert set(LANG_GROUPS[group]) <= codes, group
 
-
-def _cfg(arch='bloom'):
-    return SimpleNamespace(model=SimpleNamespace(architecture=arch))
-
-
-def test_build_run_paths_uses_group_name_as_src_tag(tmp_path, monkeypatch):
-    monkeypatch.setattr('scripts.run_xlt.evals_dir', lambda: tmp_path)
-    run_dir, llm, src_tag, run_group, run_name = build_run_paths(
-        tune_config=None, test_config=_cfg(), source_langs_sorted=sorted(JOSHI5),
-        run_group='g', slurm_task_id=0, interactive=True, source_group='joshi5',
-    )
-    assert src_tag == 'joshi5'
-    assert 'joshi5' in str(run_dir)
-
-
-def test_build_run_paths_falls_back_to_joined_langs(tmp_path, monkeypatch):
-    monkeypatch.setattr('scripts.run_xlt.evals_dir', lambda: tmp_path)
-    _, _, src_tag, _, _ = build_run_paths(
-        tune_config=None, test_config=_cfg(), source_langs_sorted=['ar', 'en'],
-        run_group='g', slurm_task_id=0, interactive=True, source_group=None,
-    )
-    assert src_tag == 'ar-en'

@@ -33,7 +33,7 @@ low_perf  PROVENANCE ONLY -- see low_perf_langs(). 1 = the paper's
           = 198 = 205 - 7 joshi5, and 85 + 7 = the Seen-92.
 
 Source-language GROUPS are not defined here. `LANG_GROUPS` in
-`scripts/run_xlt.py` is the single runtime source of truth for every group;
+`src/xlt_langs.py` is the single runtime source of truth for every group;
 `tests/test_lang_groups.py` pins its literals against this table so the two
 cannot drift. What this module is for: the per-language metadata behind those
 groups (Joshi tier, family, region, and which backbone saw what).
@@ -1543,7 +1543,7 @@ def xlmr_seen_langs():
     """Sorted SIB-200 codes in XLM-R's CC100 pretraining set (the paper's Seen-92).
 
     This is METADATA, not the runtime source of truth. Source-language groups are
-    read from `LANG_GROUPS` in `scripts/run_xlt.py` -- one place, so a group and
+    read from `LANG_GROUPS` in `src/xlt_langs.py` -- one place, so a group and
     the runs it produced can never drift. `tests/test_lang_groups.py` pins those
     literals against this table.
     """
@@ -1555,7 +1555,7 @@ def low_perf_langs():
 
     xpe.pdf sec. 4.2 defines these by full fine-tuning of *XLM-R-large* in the
     original SIB-200 benchmark (accuracy < 60%), so the list characterises
-    XLM-R. It is registered in `LOW_PERF_LANG_GROUPS` (scripts/run_xlt.py) for
+    XLM-R. It is registered in `LOW_PERF_LANG_GROUPS` (src/xlt_langs.py) for
     three backbones, and the status differs by backbone:
 
       'xlmr'      the DEFINITION. XLM-R-large is what the measurement was of,

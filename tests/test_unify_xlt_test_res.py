@@ -11,7 +11,7 @@ from scripts.evals.unify_xlt_test_res import (
     backbone, seen_langs_for, add_seen, low_perf_langs_for, restrict_to_seeds,
     LLM_SEEN_GROUP,
 )
-from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
+from src.xlt_langs import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
 
 # --- collecting the runs ----------------------------------------------------

@@ -1,9 +1,7 @@
 """
 Load Dataset
 Example:
-python -m scripts.datasets.preprocess --config ./config/proc.ds.xsc.tok.aya.yml
-python -m scripts.datasets.preprocess --config ./config/proc.ds.xsc.tok.bloom.yml
-python -m scripts.datasets.preprocess --config ./config/proc.ds.bebe.tok.aya.yml
+python -m scripts.datasets.preprocess --config ./config/units/proc.ds.bebe.tok.aya.yml
 """
 
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ on prior summaries in this conversation; quote the section/table you used.
 
 - The earlier decoder pipeline (train on XStoryCloze → test on Belebele) is **abandoned**:
   task-type mismatch (2-choice cloze vs 4-choice RC) → no cross-lingual transfer
-  (held-out ≈ zero-shot). `*.ds.xsc.yml` configs are legacy.
+  (held-out ≈ zero-shot). The xsc configs are gone (tag `pre-micm-nlp-0.4`).
 - Current design mirrors the paper (task fixed, language transfers): **train AND test on
   Belebele**. Source (seen) langs use item-disjoint fold splits (train500/val100/test300);
   the 3 folds' test blocks tile the 900 parallel items, so **every item serves as a test
@@ -35,9 +35,9 @@ a coherent story when the decoder gaps are small. Backbones: **`mdeberta`**
 both base-size, both on **SIB-200 topic classification**, zero-shot XLT only.
 
 - **No folds.** SIB-200 ships official `train`/`validation`/`test` splits of
-  **701/99/204** per language. **Never pass `--fold`** — `apply_fold` raises when a
+  **701/99/204** per language. **Never set `fold:` on a SIB entry** — `apply_fold` raises when a
   fold is given and `ds.dirs` has no `fold<N>` segment.
-- **`LANG_GROUPS` in `scripts/run_xlt.py` is the single source of truth for source
+- **`LANG_GROUPS` in `src/xlt_langs.py` is the single source of truth for source
   languages** — read groups from there, never from `src/sib200_meta.py`, so a group and
   the runs it produced cannot drift. `src/sib200_meta.py` holds the *metadata* behind
   those lists (205 rows: Joshi tier, family, region, `xlmr`), not a CSV, because
@@ -92,7 +92,7 @@ sbatch --array=0 --mem=30G --wait --gpus=0 \
   "python -m pytest tests/ -q"
 
 sbatch --array=0-59%10 --mem=30G runtime/clusters/pegasus/shell/run.sh --site-packages \
-  "python -m scripts.run_xlt_meta --meta-config ... --test-config ... --source-group ..."
+  "python -m micm_nlp run-group --group-config config/groups/<grid>.<src>.yml --runner scripts.xlt_runner:run --root-path /fscratch/bmikaberidze/xpe-exp"
 ```
 
 ### Eras (since 2026-09-18)
@@ -142,7 +142,7 @@ first** (flags are positional). Default is the current era.
   puts one row per run in `squeue`, floods the cluster and has **no throttle**. One
   array submission is one row and is throttleable. If you find yourself writing
   `for X in ...; do sbatch ...; done` over *runs*, the matrix belongs in a
-  metaconfig instead. (Looping over a handful of `--source-group` values is fine —
+  group config instead. (Submitting a grid's few per-source-group files is fine —
   that is a few *array* submissions, and they must still be sent one at a time,
   each confirmed landed before the next; see the dispatch incidents below.)
 - **ALWAYS throttle with `%10`** — `--array=0-59%10` runs at most 10 tasks at once.
@@ -240,88 +240,76 @@ builds on) — **we maintain it alongside this repo**, it is not a frozen third-
   Behaviour is unchanged either way — normalisation is driven by the callback, whose
   registration reads the top-level `peft` block.
 
-## One metaconfig = one aggregate table
+## One group config = one experiment = one table
 
-**A metaconfig must be scoped so that `unify_xlt_test_res.py` + `aggregate_xlt_res.py`
-run over its run-group and produce ONE conceptually coherent table.** Do not mix
-things into a single metaconfig that you would then have to split apart to read.
+A **group config** (`config/groups/{grid}.{source_group}.yml`) lists run entries for
+`python -m micm_nlp run-group --runner scripts.xlt_runner:run`. Its stem is the run
+group: output in `artefacts/runs/groups/{stem}/{time_id}_{name}/`. (Replaced the
+pre-0.4 `config/meta/` metaconfigs + `run_xlt_meta.py` on 2026-09-30; those are at tag
+`pre-micm-nlp-0.4`.)
 
-- Split by BACKBONE and by ARM (LR regime / recipe variant), not just by grid idea.
-  `24a_xlmr_base_armA` + `24b_xlmr_base_armC` beats one `24_xlmr_base` holding both:
-  the aggregators have no method filter, so a mixed grid yields a table whose columns
-  are `xpe` and `xpe_c` side by side and every downstream comparison has to hand-slice
-  it. (That is exactly why grid 21a needed the per-arm symlink/copy views in
-  `artefacts/_scratch/21a_arms/` to be readable at all -- avoid creating that need.)
-- Source group STAYS a CLI axis (`--source-group`), not a matrix column: unify runs
-  per source-group dir and aggregate joins them into the target x source cells. That
-  is the one split the tooling already understands.
-- Seeds and folds stay matrix rows -- they are the replication axes the aggregators
-  average over.
-- Keep the 4 methods (spt/xpe/d30/d70) together in one metaconfig: they are the
-  columns of the table, and SPT is the baseline every delta is computed against.
+- **Numbering: one number+letter per GRID** (`26a`, `26b`). A grid's per-source-group
+  files share it (`14b_bebe_grid_full_bloomz.{enarzho,joshi5,bloom_seen}`) because
+  `aggregate_xlt_res.py` globs `{grid}.*` into one table; two different grids never
+  share a number. Don't repeat the source group in the grid name.
+- One file = one source group (named on every entry as `source_group:`); split grids
+  by BACKBONE and by ARM (LR regime / recipe variant) too -- the aggregators have no
+  method filter. Keep the 4 methods (spt/xpe/d30/d70) together: they are the table's
+  columns, and SPT is the baseline every delta is computed against.
+- Entries carry `seed`, `fold`, `method`, `source_group`, `llm` (stamped on every result
+  row) and optional `overrides`. Shapes: `separate_test:` tune+test; `tune_only: true`
+  tune only (LR searches, select on validation); `adapter:` replay; neither = zero-shot.
+- Generate regular grids with `scripts/gen_xlt_group_config.sh <grid> <src> <llm> [units] [seeds]`.
 
-Rule of thumb: if reading the result requires filtering the metaconfig's own rows,
-it should have been two metaconfigs.
+## Group configs are immutable contracts
 
-## Metaconfigs are immutable contracts
+**Once ANY entry of a group config has been dispatched, the file must never be
+edited** (the run dir, the result rows' `group` column and wandb all point back to it
+by name). Additive only: appending NEW entries is fine; editing or reordering existing
+ones is not (array indices are positional). Changing an already-run entry means a NEW
+group config (new number/letter), whose header says what it supersedes and why.
+Dispatch notes in the header comment may be appended.
 
-**A metaconfig is the contract artefact for the runs it produced. Once ANY of its
-entries has been dispatched, that file must never be edited.** The run dir, the
-`run_group`, the wandb group and the `meta_config` column in every `raw.csv` all point
-back to it by name — editing it silently rewrites the description of results that
-already exist, and nobody reading the file later can tell.
-
-- **Additive changes only.** Appending NEW matrix entries is fine (that is how the
-  grid-14 seed extension was done: seeds 15-19 appended as indices 60-119, with a
-  dated comment saying so). Editing or reordering an existing entry is not — array
-  indices are positional, so a reorder also silently repoints old results.
-- **Changing an already-run entry means a NEW metaconfig**, with a new stem and hence
-  a new `run_group`: `17a_lr_search_sib_mdeberta.yml` -> `17c_...`, never an in-place
-  edit. Header comment should say what it supersedes and why.
-- Header comments describing *dispatch* (the sbatch line, partition pins, which array
-  indices were re-dispatched after a fix) are the exception: they document the file's
-  own use and may be appended to.
-- Same rule for the tune/test configs a metaconfig references. If a config must
-  change after runs exist, the runs are stale — say so explicitly rather than
-  quietly re-pointing.
+Same rule for the units a group config references. A unit that must change after runs
+exist makes those runs stale: freeze what they used under `config/units/archive/{grid}/`
+first. The old decoder grids 8-16 were rewritten this way on 2026-09-30: their units
+were regenerated from each run's wandb `config.yaml` (every run reproduces its record),
+because the live tune configs had drifted after those grids ran (LRs, `max_steps`,
+early stopping on `eval_loss` vs accuracy, 9a's scheduler). Generator:
+`scripts/gen_archive_units.py`.
 
 ## Repository layout
 
 ```
-config/                         # all experiment configs (YAML)
-  tune.{xpe|spt|dual}.lm.{model}.ds.{xsc|bebe|sib}.yml  # finetune a PEFT method
-  test.lm.{model}.ds.{bebe[.fold]|sib}.yml           # eval; .fold = self-split test split
-  proc.ds.{xsc|bebe|sib}.tok.{aya|bloom|mdeberta|mgte}.yml  # tokenize a benchmark per backbone
-  meta/{N}[a|b]_*.yml             # metaconfigs (LR searches, grids); stem = wandb run_group
+config/
+  units/                          # unit configs (one run's full setup)
+    tune.{xpe|spt|dual}.lm.{model}.ds.bebe.yml       # finetune a PEFT method
+    test.lm.{model}.ds.bebe[.fold].yml                # eval; .fold = self-split test split
+    proc.ds.bebe.tok.{aya|bloom|g3|g4}.yml            # tokenize Belebele per backbone
+    archive/{grid}/                                   # frozen units of already-run grids
+  groups/{N}{a|b}_{grid}.{source_group}.yml           # group configs; stem = run group
 scripts/
-  run_xlt.py                     # core: tune_phase, load_concat_dataset, discover_target_langs
-  run_xlt_meta.py                # fan a metaconfig matrix over a SLURM --array; --fold N, --seed
-  evals/                         # plot/unify; unify_xlt_test_res.py (raw.csv: pool folds + seed std, else per-run fallback), unify_xlt_valid_res.py (valid_res.csv: per-fold mean, seed std)
-                                 # aggregate_xlt_res.py: the per-lang test_unified.csv of all source groups -> ONE xlt_runs/{llm}/aggr_res.csv (target-group x source-group cells)
+  xlt_runner.py                  # the run-group runner: tune on source langs, test the rest
+  gen_xlt_group_config.sh        # generate a regular 4-method x 3-fold x seeds grid
+  evals/                         # unify_xlt_test_res.py / unify_xlt_valid_res.py -> aggregate_xlt_res.py (one table per grid)
                                  # NOTE: quant.py / quant_boot_diff_sci.py are for REPRESENTATION evaluation (hidden-state analysis), NOT accuracy/eval-result significance — do not use them to test method-vs-method accuracy gaps.
   datasets/                      # bebe: reframe_bebe_to_ftp -> split_bebe_folds -> preprocess_dir
-                                 # sib:  download_sib -> preprocess_dir  (no fold step)
-src/                             # importable helpers (NOT scripts): utils.py, hub_upload.py,
-                                 # sib200_meta.py (205-lang table: xlmr/Seen-92, low_perf/46)
+src/                             # importable helpers (NOT scripts): xlt_langs.py (LANG_GROUPS,
+                                 # LOW_PERF_LANG_GROUPS), sib200_meta.py, utils.py, hub_upload.py
 runtime/clusters/pegasus/shell/
-  run.sh                         # SLURM+container wrapper (--site-packages, --no-gpu)
-  run_minimal.sh                 # light CPU job
-  logs/sbatch/{jobid}_{task}.{out,err}   # per-array-task logs; .out has eval metrics, run_name
+  run.sh                         # SLURM+container wrapper (--era, --site-packages, --no-gpu)
+  logs/sbatch/{jobid}_{task}.{out,err}   # per-array-task logs
 artefacts/                       # ALL data + outputs (datasets live here, not data/)
-  datasets/benchmarks/topic/sib200/          # SIB-200; official splits, NO folds
-    {lang}/                                  # 205 langs
-      {train,validation,test}/               # 701 / 99 / 204
-      tokenized--{org}--{model}/               # e.g. tokenized--microsoft--mdeberta-v3-base
-  datasets/benchmarks/mcqa/{xstory_cloze_ftp,belebele_ftp}/
-    {lang}/                                  # e.g. eng_Latn; 122 langs for belebele_ftp
+  datasets/benchmarks/mcqa/belebele_ftp/
+    {lang}/                                  # 122 langs
       {train,validation,test}/               # unfolded root splits
       tokenized--{org}--{model}/               # e.g. tokenized--CohereLabs--aya-expanse-8b
       fold{0,1,2}/                           # item-disjoint self-split (train500/val100/test300)
         {train,validation,test}/  +  tokenized--{org}--{model}/
+  runs/groups/{group}/{time_id}_{name}/       # 0.4+ runs (info.json, eval_*.csv, separate_test*.csv)
+  evals/xlt_runs/{llm}/{src_tag}/{run_group}/{timeid}_{run_name}/   # pre-0.4 runs (read-only)
   models/{family}/{org}/{model}/mcqa_ftp/{uuid}_.../   # saved PEFT adapters
-  evals/runs/{uuid}_...                       # single eval runs
-  evals/xlt_runs/{llm}/{src_tag}/{run_group}/{timeid}_{run_name}/   # XLT tune/test runs
-  wandb/run-*/                                # local wandb (config.yaml, summary, history)
+  wandb/run-*/                                # local wandb (config.yaml = a run's resolved config)
 ```
 
 Key conventions:
@@ -330,7 +318,5 @@ Key conventions:
   regex alternation, so a second run over a `|` folder crashes (`int(None)`). The old names
   remain as symlinks for the pre-micm-nlp-0.4 era; migration: `scripts/datasets/migrate_pipe_dirs.py`.
 - Dataset `ds.dirs` (e.g. `mcqa/belebele_ftp/eng_Latn/fold0/tokenized--...`) is a **template**:
-  the `{lang}` segment is swapped per `--source-group`/`--source-langs` lang and concatenated
-  (see [[project_xlt_seen_unseen_assembly]]); `--fold N` swaps the `fold{N}` segment.
-- `src_tag` in xlt_runs = the source-group name (or joined source langs, or `zero`).
-
+  the runner swaps the `{lang}` segment per source-group lang and concatenates
+  (see [[project_xlt_seen_unseen_assembly]]); an entry's `fold: N` swaps the `fold{N}` segment.

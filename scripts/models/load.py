@@ -2,8 +2,8 @@
 Train and evaluate a model using the pipeline.
 
 Usage:
-    python -m scripts.models.load --config ./config/tune.lm.aya.ds.xsc.yml
-    python -m scripts.models.load --config ./config/test.lm.aya.ds.bebe.yml
+    python -m scripts.models.load --config ./config/units/tune.xpe.lm.aya.ds.bebe.yml
+    python -m scripts.models.load --config ./config/units/test.lm.aya.ds.bebe.yml
     
 """
 if __name__ == '__main__':

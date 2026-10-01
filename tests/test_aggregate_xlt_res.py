@@ -5,7 +5,7 @@ import pytest
 from scripts.evals.aggregate_xlt_res import (
     aggregate, find_tables, method_cols, check_zero_shot_consistency,
 )
-from scripts.run_xlt import LANG_GROUPS
+from src.xlt_langs import LANG_GROUPS
 
 RUN_GROUP = '14x_grid'
 
@@ -130,7 +130,7 @@ def test_zero_shot_check_flags_misaligned_target_sets():
 def test_low_perf_groups_cover_langs_that_exist_as_targets():
     # guards against typos in LOW_PERF_LANG_GROUPS: every code must look like a
     # Belebele lang tag, and none may be a joshi5 source
-    from scripts.run_xlt import LOW_PERF_LANG_GROUPS
+    from src.xlt_langs import LOW_PERF_LANG_GROUPS
     for llm, langs in LOW_PERF_LANG_GROUPS.items():
         assert len(langs) == len(set(langs)), f'{llm} has duplicates'
         assert all(len(l.split('_')) == 2 for l in langs)

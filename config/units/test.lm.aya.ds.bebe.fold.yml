@@ -57,7 +57,7 @@ ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
     # Belebele fold TEST split (300 item-disjoint held-out items). `fold0` is the
-    # literal default; run_xlt_meta's `--fold N` swaps this segment (parts[3]) to
+    # literal default; a group entry's `fold: N` swaps this segment (parts[3]) to
     # fold{N}. Distinct from test.lm.aya.ds.bebe.yml, which points at the
     # unfolded root (900) for the zero-shot baseline.
     dirs: mcqa/belebele_ftp/eng_Latn/fold0/tokenized--CohereLabs--aya-expanse-8b

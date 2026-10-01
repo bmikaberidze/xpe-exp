@@ -5,11 +5,8 @@ Reads config.ds.dirs, globs all subdirs under that path, and for each one
 preprocesses (tokenizes) and collects length statistics into a single CSV.
 
 Usage:
-    python -m scripts.datasets.stats \
-        --config ./config/proc.ds.xsc.tok.aya.yml
-
-    python -m scripts.datasets.stats \
-        --config ./config/proc.ds.bebe.tok.aya.yml
+    python -m scripts.datasets.length_stats \
+        --config ./config/units/proc.ds.bebe.tok.aya.yml
 """
 
 import os

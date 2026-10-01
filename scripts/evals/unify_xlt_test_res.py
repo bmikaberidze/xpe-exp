@@ -46,12 +46,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts.run_xlt import LANG_GROUPS, LOW_PERF_LANG_GROUPS
+from src.xlt_langs import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
 TIMESTAMP_RE = re.compile(r'^\d{8}_\d{6}_')
 
 # Which LANG_GROUPS entry is the pretraining-"seen" set for each backbone (the
-# `llm` column stamped by the group entry). LANG_GROUPS (scripts/run_xlt.py) is the source of
+# `llm` column stamped by the group entry). LANG_GROUPS (src/xlt_langs.py) is the source of
 # truth for the actual language lists.
 LLM_SEEN_GROUP = {
     'bloom': 'bloom_seen',

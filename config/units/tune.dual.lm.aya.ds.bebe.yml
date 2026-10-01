@@ -85,8 +85,8 @@ tokenizer:
 ds:
     descriptive_name: null
     category: benchmarks # benchmarks | corpora | collections | raw
-    # Belebele self-split fold. `fold0` is the literal default; run_xlt_meta's
-    # `--fold N` swaps this segment (parts[3]) to fold{N}. The fold's DatasetDict
+    # Belebele self-split fold. `fold0` is the literal default; a group entry's
+    # `fold: N` (xlt_runner.aim_at_fold) swaps this segment (parts[3]) to fold{N}. The fold's DatasetDict
     # carries train (500) / validation (100) / test (300) item-disjoint splits.
     dirs: mcqa/belebele_ftp/eng_Latn/fold0/tokenized--CohereLabs--aya-expanse-8b
     name: null

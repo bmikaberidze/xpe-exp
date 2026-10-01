@@ -8,28 +8,36 @@
 #   scripts/gen_xlt_group_config.sh 14a_bebe_grid_full_aya enarzho aya \
 #       > config/groups/14a_bebe_grid_full_aya.enarzho.yml
 #
-# Args: <grid> <source_group> <llm> [units_dir_relative_to_groups]
+# Args: <grid> <source_group> <llm> [units_dir_relative_to_groups] [seeds]
+#   seeds: space-separated list, default "10 11 12 13 14 15 16 17 18 19"
 set -euo pipefail
 
 GRID=${1:?grid name, e.g. 14a_bebe_grid_full_aya}
 SRC=${2:?source group, e.g. enarzho}
 LLM=${3:?backbone tag, e.g. aya}
 UNITS=${4:-../units}
+SEEDS=(${5:-$(seq -s " " 10 19)})
+N_RUNS=$(( 4 * 3 * ${#SEEDS[@]} ))
+if (( ${#SEEDS[@]} == 10 )) && [[ "${SEEDS[*]}" == "$(seq -s " " 10 19)" ]]; then
+    SEED_DESC="10..19"
+else
+    SEED_DESC=$(IFS=,; echo "${SEEDS[*]}")
+fi
 
 cat <<EOF
 # ${GRID}, source group ${SRC^^} (${LLM}).
 #
-# Generated: scripts/gen_xlt_group_config.sh ${GRID} ${SRC} ${LLM}
+# Generated: scripts/gen_xlt_group_config.sh ${GRID} ${SRC} ${LLM}${5:+ ${UNITS} \"${5}\"}
 # One group config per source group: one experiment, one output directory
 # (artefacts/runs/groups/${GRID}.${SRC}/), so a group's runs can never mix two
 # source sets. Every entry key beyond the reserved ones is stamped on each result
 # row, so method / fold / source_group / llm are columns of the aggregate table.
 #
-# Axes: method (xpe, spt, d30, d70) x fold (0,1,2) x seed (10..19) = 120 runs.
+# Axes: method (xpe, spt, d30, d70) x fold (0,1,2) x seed (${SEED_DESC}) = ${N_RUNS} runs.
 # The DUAL arms differ from each other only by peft.encoder_ratio.
 #
 # Dispatch (Aya needs >80 GB VRAM -> pin the big-VRAM partitions; --mem is host RAM):
-#   sbatch --array=0-119%10 --mem=80G \\
+#   sbatch --array=0-$((N_RUNS - 1))%10 --mem=80G \\
 #     --partition=B200,H200,H200-PCI,H100-PCI \\
 #     runtime/clusters/pegasus/shell/run.sh --site-packages \\
 #       "python -m micm_nlp run-group \\
@@ -55,7 +63,7 @@ for m in xpe spt d30 d70; do
     esac
     printf '\n  # ===== %s =====\n' "$m"
     for f in 0 1 2; do
-        for s in $(seq 10 19); do
+        for s in "${SEEDS[@]}"; do
             printf '  - {config: %-5s name: %s, seed: %d, fold: %d, method: %s, source_group: %s, llm: %s%s, separate_test: {config: test}}\n' \
                 "${cfg}," "${m}_f${f}_s${s}" "$s" "$f" "$m" "$SRC" "$LLM" "$ov"
         done

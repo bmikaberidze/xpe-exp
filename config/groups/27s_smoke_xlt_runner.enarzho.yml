@@ -1,0 +1,25 @@
+# 27s_smoke_xlt_runner, source group ENARZHO (aya) -- end-to-end smoke of the finished
+# micm-nlp 0.5 refactor (2026-09-30), before any new experiment is dispatched.
+#
+#   0  tune_only       (new shape: the old --skip-test)            -- 20 steps
+#   1  tune + test     (separate_test over all 119 target langs)   -- 20 steps
+#
+# Not a result: 20 steps is far below convergence. Checks only that both shapes run,
+# write their files and that scripts/evals can read them.
+#
+# Dispatch (Aya needs >80 GB VRAM):
+#   sbatch --array=0-1%10 --mem=80G \
+#     --partition=B200,H200,H200-PCI,H100-PCI \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m micm_nlp run-group \
+#          --group-config config/groups/27s_smoke_xlt_runner.enarzho.yml \
+#          --runner scripts.xlt_runner:run \
+#          --root-path /fscratch/bmikaberidze/xpe-exp"
+
+configs:
+  xpe:  ../units/tune.xpe.lm.aya.ds.bebe.yml
+  test: ../units/test.lm.aya.ds.bebe.fold.yml
+
+runs:
+  - {config: xpe, name: xpe_tune_only_f0_s10, seed: 10, fold: 0, method: xpe, source_group: enarzho, llm: aya, overrides: {training_args.args.max_steps: 20, training_args.args.eval_steps: 10, training_args.args.save_steps: 10}, tune_only: true}
+  - {config: xpe, name: xpe_tune_test_f0_s10, seed: 10, fold: 0, method: xpe, source_group: enarzho, llm: aya, overrides: {training_args.args.max_steps: 20, training_args.args.eval_steps: 10, training_args.args.save_steps: 10}, separate_test: {config: test}}

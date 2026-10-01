@@ -2,7 +2,7 @@
 
 Experimental code that extends the **Cross-Prompt Encoder (XPE)** paper to generative (decoder-only) transformers, plus visual and quantitative analyses comparing XPE vs SPT (Soft Prompt Tuning) representations.
 
-Companion repo to [`micm-nlp`](https://github.com/bmikaberidze/micm-nlp) — the toolkit ships the building blocks (`MODEL`, `DATASET`, PEFT dispatch, XPE module); this repo holds the experiment configs, dataset prep, eval scripts, and analyses.
+Companion repo to [`micm-nlp`](https://github.com/bmikaberidze/micm-nlp) — the toolkit ships the building blocks (`MODEL`, `DATASET`, PEFT dispatch, XPE module, the `run-group` runner); this repo holds the experiment configs, dataset prep, the cross-lingual-transfer runner, eval scripts, and analyses.
 
 ## Paper
 
@@ -15,7 +15,7 @@ Companion repo to [`micm-nlp`](https://github.com/bmikaberidze/micm-nlp) — the
 ```bash
 git clone https://github.com/bmikaberidze/xpe-exp.git
 cd xpe-exp
-pip install -r requirements.txt   # pins micm-nlp==0.1.0
+pip install -r requirements.txt   # micm-nlp v0.5.0 (git tag)
 cp .env.example .env              # add WANDB_API_KEY, HF_TOKEN
 ```
 
@@ -32,59 +32,58 @@ docker build -t xpe-exp .
 docker run --gpus all -it --rm -v $(pwd):/app -w /app xpe-exp bash
 ```
 
+The code before micm-nlp 0.4 (the `run_xlt` / `run_xlt_meta` CLIs, `config/meta/` metaconfigs, the XStoryCloze and SIB-200 encoder configs) is at tag `pre-micm-nlp-0.4`.
+
 ## Layout
 
 ```
-config/   YAML experiment configs (FTP-reframed XSC + Belebele on BLOOM, AYA)
-src/      experiment-local helpers (sib200_meta, hub_upload, utils)
-data/     committed reference data (e.g. sib200_meta.csv)
-scripts/  runners (run, run_xlt) + dataset prep, model utilities, eval analyses
-tests/    unit tests
+config/units/           unit configs: one run's model, data, PEFT and training setup
+config/units/archive/   frozen units of old grids (what those runs actually used)
+config/groups/          group configs: one experiment = one source group = one output dir
+src/                    helpers: xlt_langs (language groups), sib200_meta, hub_upload, utils
+scripts/xlt_runner.py   the cross-lingual-transfer runner (tune on source langs, test the rest)
+scripts/datasets/       dataset prep (reframe, folds, tokenize)
+scripts/evals/          unify / aggregate results, plots, representation analyses
+tests/                  unit tests
 ```
 
 ## Datasets
 
-Reframe MCQA benchmarks to FTP (First-Token Prediction) format and tokenize per model. Artefacts land under `artefacts/datasets/benchmarks/mcqa/{belebele_ftp,xstory_cloze_ftp}/<lang>/`, with tokenized variants written to a `tokenized|<org>|<model>` subfolder per tokenizer.
+Reframe MCQA benchmarks to FTP (First-Token Prediction) format and tokenize per model. Artefacts land under `artefacts/datasets/benchmarks/mcqa/belebele_ftp/<lang>/`, with tokenized variants in a `tokenized--<org>--<model>` subfolder per tokenizer.
 
 ```bash
-# 1. Reframe sources to FTP (downloads from HF, saves to disk)
-python -m scripts.datasets.reframe_bebe_to_ftp   # 122 Belebele language configs
-python -m scripts.datasets.reframe_xsc_to_ftp    # 11 XStoryCloze language configs
+# 1. Reframe Belebele to FTP (downloads from HF, saves to disk): 122 languages
+python -m scripts.datasets.reframe_bebe_to_ftp
 
-# 2. Tokenize every language subdirectory with the chosen tokenizer
-python -m scripts.datasets.preprocess_dir --config ./config/proc.ds.bebe.tok.bloom.yml
-python -m scripts.datasets.preprocess_dir --config ./config/proc.ds.bebe.tok.aya.yml
-python -m scripts.datasets.preprocess_dir --config ./config/proc.ds.xsc.tok.bloom.yml
-python -m scripts.datasets.preprocess_dir --config ./config/proc.ds.xsc.tok.aya.yml
+# 2. Item-disjoint self-split folds (train 500 / val 100 / test 300 per fold)
+python -m scripts.datasets.split_bebe_folds
+
+# 3. Tokenize every language (root + fold0-2) with the chosen tokenizer
+python -m scripts.datasets.preprocess_dir --config ./config/units/proc.ds.bebe.tok.aya.yml
+python -m scripts.datasets.preprocess_dir --config ./config/units/proc.ds.bebe.tok.bloom.yml
 ```
-
-For a single language, use `preprocess.py` and pin `ds.dirs` (e.g. `mcqa/belebele_ftp/eng_Latn`) in the config.
 
 ## Usage
 
-Train / fine-tune / evaluate / test via the unified runner, configured by YAML. The config's `mode:` field selects what runs (`train` / `finetune` / `evaluate` / `test`).
+A **group config** lists runs; each entry names a unit config and the axes it varies
+(`seed`, `fold`, `method`, `source_group`, `overrides`). The runner tunes on the entry's
+source languages (a key of `LANG_GROUPS` in `src/xlt_langs.py`) and tests on every
+other language:
 
 ```bash
-# Zero-shot test on Belebele (one language at a time; pin ds.dirs in the config)
-python -m scripts.run --config ./config/test.lm.bloom.ds.bebe.yml
-python -m scripts.run --config ./config/test.lm.aya.ds.bebe.yml
+# One entry locally (index 0); under SLURM the array task id picks the entry
+python -m micm_nlp run-group \
+  --group-config config/groups/26a_bebe_grid_aya.aya_high.yml \
+  --runner scripts.xlt_runner:run --run-index 0
 
-# Zero-shot eval on XStoryCloze validation (validation aliased into the test role)
-python -m scripts.run --config ./config/test.lm.bloom-7b1.ds.xsc.yml
-python -m scripts.run --config ./config/test.lm.aya.ds.xsc.yml
-
-# Tune XPE on XSC (full)
-python -m scripts.run --config ./config/tune.xpe.lm.bloom.ds.xsc.yml
-python -m scripts.run --config ./config/tune.xpe.lm.aya.ds.xsc.yml
-
-# Smoke variants — 1% subset, 1 epoch — for fast end-to-end verification
-python -m scripts.run --config ./config/tune.smoke.xpe.lm.bloom.ds.xsc.yml
-python -m scripts.run --config ./config/tune.smoke.xpe.lm.aya.bf16.ds.xsc.yml
+# A single unit config, no cross-lingual loop (e.g. a zero-shot test)
+python -m micm_nlp run --config config/units/test.lm.aya.ds.bebe.yml
 ```
 
-Each run logs to W&B (set `WANDB_API_KEY` in `.env`, or flip `report_to: none` in the config for offline). For aya-8b on a single 48 GB GPU, the configs use `torch_dtype: bfloat16` + `device_map: auto` so weights stream directly to the GPU instead of buffering in CPU RAM (avoids cgroup OOM under tight SLURM allocations).
-
-The full aya tune is dataset-size-agnostic: `max_steps: 6000` with `eval_steps: 500` / `save_steps: 500` and early stopping (`patience: 5`, `early_stopping_after: 0.5`). XPE adapter trains at `learning_rate: 1e-4`; the per-param-group override block is left commented as a template for re-enabling a separate LR on `xpe_embedding`.
+Entry shapes: `separate_test:` = tune then test; `tune_only: true` = tune only (LR
+searches); no tuning with `adapter:` = replay a trained adapter; neither = zero-shot.
+Results land in `artefacts/runs/groups/{group}/{time_id}_{name}/`; `scripts/evals/`
+turns a grid into one table.
 
 Visual / quantitative analyses (XPE vs SPT representations):
 

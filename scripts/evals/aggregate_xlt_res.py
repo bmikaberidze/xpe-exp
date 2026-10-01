@@ -42,7 +42,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts.run_xlt import LANG_GROUPS
+from src.xlt_langs import LANG_GROUPS
 
 SOURCE_ORDER = ['enarzho', 'joshi5']  # then the *_seen group, whatever it is
 

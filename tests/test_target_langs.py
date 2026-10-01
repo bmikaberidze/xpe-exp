@@ -1,5 +1,5 @@
 """Unit tests for excluding source langs from the discovered target set."""
-from scripts.run_xlt import target_langs_excluding
+from scripts.xlt_runner import target_langs_excluding
 
 
 ALL = ['arb_Arab', 'deu_Latn', 'eng_Latn', 'spa_Latn', 'zho_Hans']
