@@ -86,3 +86,14 @@ runs:
   - {config: g4, name: g4_12b_it_turn, llm: gemma4-12B, size: 12B, variant: it_turn,
      overrides: {model.pretrained.name: google/gemma-4-12B-it,
                  ds.dirs: mcqa/belebele_ftp_chat_gemma4/eng_Latn/tokenized--google--gemma-4-12B}}
+
+  # ===== appended 2026-10-07 (evening): PREFILL layout. In index 12's layout the
+  # model's top-1 next token is a letter in only 7/20 English items (it wants to
+  # write "Answer：" again or start a sentence; diagnostic job 3502977), so the
+  # restricted argmax reads the tail of the distribution. With `Answer：` moved into
+  # the model turn after the empty thought channel it answers letter-first (20/20,
+  # 0.96 of the mass). belebele_ftp_chat_gemma4_prefill, proc.ds.bebe.tok.g4chat3.yml.
+  # Index 13.
+  - {config: g4, name: g4_12b_it_prefill, llm: gemma4-12B, size: 12B, variant: it_prefill,
+     overrides: {model.pretrained.name: google/gemma-4-12B-it,
+                 ds.dirs: mcqa/belebele_ftp_chat_gemma4_prefill/eng_Latn/tokenized--google--gemma-4-12B}}

@@ -33,6 +33,7 @@ from pathlib import Path
 from datasets import Dataset
 
 from micm_nlp.path import datasets_dir
+from scripts.datasets.reframe_bebe_to_ftp import RESPONSE_TEMPLATE
 from src.utils import micm_nlp_setup
 
 logging.basicConfig(level=logging.INFO)
@@ -54,13 +55,27 @@ CHAT_TEMPLATES = {
     # (belebele_ftp_chat_gemma/ = the `gemma` layout, probe 25/11, kept as evidence.)
     "gemma4": ("<|turn>user\n",
                "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"),
+    # Same, but `Answer：` moves from the end of the user turn into the model turn
+    # (a prefill). Measured 2026-10-07 on gemma-4-12B-it: with `Answer：` closing the
+    # user turn the model's top-1 next token is a letter in only 7/20 English items
+    # (it wants to write "Answer：" again, or "The ..."); prefilled, 20/20 with 0.96
+    # of the mass on the four letters. This is the Gemma 3 analogue, where the raw
+    # FTP text's trailing `Answer：` already acted as a prefill.
+    "gemma4_prefill": ("<|turn>user\n",
+                       "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>" + RESPONSE_TEMPLATE),
 }
+# Templates whose model turn carries RESPONSE_TEMPLATE: strip it off the user text.
+PREFILL = {"gemma4_prefill"}
 
 TOKENIZED_MARK = "tokenized--"
 
 
 def wrap_text(text: str, template: str) -> str:
     user_open, model_open = CHAT_TEMPLATES[template]
+    if template in PREFILL:
+        if not text.endswith(RESPONSE_TEMPLATE):
+            raise ValueError(f"FTP text does not end with {RESPONSE_TEMPLATE!r}: {text[-40:]!r}")
+        text = text[: -len(RESPONSE_TEMPLATE)].rstrip("\n")
     return f"{user_open}{text}{model_open}"
 
 
