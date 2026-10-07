@@ -4,7 +4,7 @@ import math
 import pandas as pd
 import pytest
 
-from scripts.evals.unify_xlt_valid_res import VALID_GLOB, aggregate, collect
+from scripts.evals.lr_search_table import VALID_GLOB, aggregate, collect
 
 
 def _valid_df():

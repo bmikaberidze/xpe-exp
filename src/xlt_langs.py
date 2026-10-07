@@ -169,7 +169,7 @@ LANG_GROUPS = {
 # These are TARGET groups, never source groups: they are disjoint from the
 # backbone's pretraining-seen set and from joshi5, i.e. low-perf is a strict
 # SUBSET of that backbone's unseen targets. Consumed by the result aggregators
-# (unify_xlt_test_res marks them `seen = -1`), not by the runner.
+# (lang_table marks them `seen = -1`), not by the runner.
 LOW_PERF_LANG_GROUPS = {
     'aya': [
         # African (Niger-Congo / Afro-Asiatic / Nilotic)

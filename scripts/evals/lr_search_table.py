@@ -15,12 +15,12 @@ Aggregation = "means per fold, std across seeds":
   own tuning signal); seeds are the replication axis, so std lives there.
 
 Output (beside PATH unless --out given):
-  valid_unified.csv  tidy: method, <group-key>, fold, n_seeds, mean_val_acc, seed_std
+  lr_search_table.csv  tidy: method, <group-key>, fold, n_seeds, mean_val_acc, seed_std
 
 Usage:
-    python -m scripts.evals.unify_xlt_valid_res \\
+    python -m scripts.evals.lr_search_table \\
         artefacts/runs/groups/9c_lr_search_bebe_bloomz.joshi5
-    python -m scripts.evals.unify_xlt_valid_res <path> --group-by weight_decay
+    python -m scripts.evals.lr_search_table <path> --group-by weight_decay
 """
 import argparse
 from pathlib import Path
@@ -143,10 +143,10 @@ def main() -> None:
                     help='swept-hyperparameter column of a search, e.g. learning_rate '
                          '(default: none -- a grid, cells are method x fold)')
     ap.add_argument('--out', type=Path, default=None,
-                    help='output CSV (default: PATH/valid_unified.csv)')
+                    help='output CSV (default: PATH/lr_search_table.csv)')
     args = ap.parse_args()
 
-    out_path = args.out or (args.path / 'valid_unified.csv')
+    out_path = args.out or (args.path / 'lr_search_table.csv')
     out = aggregate(collect(args.path), group_key=args.group_by)
     out.to_csv(out_path, index=False)
     _warn_incomplete(out, args.group_by)

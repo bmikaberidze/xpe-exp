@@ -83,7 +83,7 @@ Plan: `docs/superpowers/plans/2026-08-05-sib200-encoder-backbones.md`.
 **NEVER run python on the login node. Every step goes through `sbatch` + an array,
 and the container that `run.sh` starts carries the correct environment** — it is the
 only interpreter whose output counts. This covers dataset downloads, tokenization,
-probes, training, evaluation, unify/aggregate and pytest.
+probes, training, evaluation, the result tables and pytest.
 
 ```
 sbatch --array=0 --mem=30G --wait --gpus=0 \
@@ -193,10 +193,10 @@ VRAM groups (see the reference table at the bottom of `run.sh`):
   *avoid* it. Use the same pin for mGTE unless it is shown not to need it.
 - **`--mem=30G` is the container FLOOR, not a training request.** Use 64G for GPU
   training jobs (the concatenated `mdeberta_seen` source set is 92 x 701 rows); 30G is
-  fine only for CPU-only steps like tokenization, unify and pytest.
+  fine only for CPU-only steps like tokenization, the result tables and pytest.
 - **Any `run.sh` job needs ≥30 GB RAM** (the ~25 GB container image unpacks into
   node tmpfs and is charged to the job's cgroup) — never lower `--mem` below 30G,
-  even for tiny CPU-only jobs like the unify scripts.
+  even for tiny CPU-only jobs like the result-table scripts.
 
 ## Core package: micm_nlp
 
@@ -250,7 +250,7 @@ pre-0.4 `config/meta/` metaconfigs + `run_xlt_meta.py` on 2026-09-30; those are 
 
 - **Numbering: one number+letter per GRID** (`26a`, `26b`). A grid's per-source-group
   files share it (`14b_bebe_grid_full_bloomz.{enarzho,joshi5,bloom_seen}`) because
-  `aggregate_xlt_res.py` globs `{grid}.*` into one table; two different grids never
+  `target_source_table.py` globs `{grid}.*` into one table; two different grids never
   share a number. Don't repeat the source group in the grid name.
 - One file = one source group (named on every entry as `source_group:`); split grids
   by BACKBONE and by ARM (LR regime / recipe variant) too -- the aggregators have no
@@ -291,7 +291,7 @@ config/
 scripts/
   xlt_runner.py                  # the run-group runner: tune on source langs, test the rest
   gen_xlt_group_config.sh        # generate a regular 4-method x 3-fold x seeds grid
-  evals/                         # unify_xlt_test_res.py / unify_xlt_valid_res.py -> aggregate_xlt_res.py (one table per grid)
+  evals/                         # lang_table.py / lr_search_table.py -> target_source_table.py (one table per grid)
                                  # NOTE: quant.py / quant_boot_diff_sci.py are for REPRESENTATION evaluation (hidden-state analysis), NOT accuracy/eval-result significance — do not use them to test method-vs-method accuracy gaps.
   datasets/                      # bebe: reframe_bebe_to_ftp -> split_bebe_folds -> preprocess_dir
 src/                             # importable helpers (NOT scripts): xlt_langs.py (LANG_GROUPS,
