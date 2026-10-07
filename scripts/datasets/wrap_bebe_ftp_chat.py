@@ -43,14 +43,15 @@ logger = logging.getLogger(__name__)
 # generation prompt. The turn close follows the user text directly (no newline),
 # as the template renders it.
 CHAT_TEMPLATES = {
-    # Gemma 3 (and earlier): <start_of_turn> / <end_of_turn>.
-    "gemma3": ("<start_of_turn>user\n", "<end_of_turn>\n<start_of_turn>model\n"),
+    # Gemma 3 markers (<start_of_turn> / <end_of_turn>). Keyed `gemma` because the
+    # key names the output dir: belebele_ftp_chat_gemma/ is what probe 25/11 ran on.
+    "gemma": ("<start_of_turn>user\n", "<end_of_turn>\n<start_of_turn>model\n"),
     # Gemma 4 (chat_template.jinja "Canonical Chat Template", 2026-07-09): NEW
     # markers <|turn> / <turn|>, and with thinking off (the default) the
     # generation prompt ends in an EMPTY thought channel, so the first token the
     # model emits after it is the answer. The Gemma 3 markers are NOT in the
     # Gemma 4 vocabulary at all -- fed as text they tokenize into subword pieces.
-    # (belebele_ftp_chat_gemma/ = the gemma3 layout, probe 25/11, kept as evidence.)
+    # (belebele_ftp_chat_gemma/ = the `gemma` layout, probe 25/11, kept as evidence.)
     "gemma4": ("<|turn>user\n",
                "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"),
 }
