@@ -1,0 +1,105 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# A new push to the same PR supersedes the review still running on the old head.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # PRs from forks get no secrets, so this job cannot review them -- skip them
+    # rather than fail. Do NOT switch to `pull_request_target` to fix that: it runs
+    # with secrets against untrusted fork code. Drafts are skipped too; marking
+    # one ready for review triggers the run.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      # id-token: write is required -- the action uses OIDC to exchange for the
+      # Claude Code GitHub App token (separate from the Anthropic OAuth token in
+      # CLAUDE_CODE_OAUTH_TOKEN, which only authenticates Anthropic).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # Max-plan subscription via OAuth token (no API billing). Generate
+          # locally with `claude setup-token`, then set as the repo secret.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this PR to xpe-exp, the experiment repo extending the XPE paper
+            (cross-lingual prompt tuning) on top of the micm-nlp framework. The PR
+            branch is checked out in the working directory; read CLAUDE.md first, then
+            the diff (`gh pr diff`), then whatever files you need for context.
+
+            Report only real problems. No praise, no restating the diff, no style nits a
+            linter would catch. If nothing is wrong, say so in one line.
+
+            Check:
+
+            - **Correctness** -- bugs, unhandled edge cases, swallowed exceptions. Verify
+              behaviour by reading function bodies, not signatures. Result scripts
+              (`scripts/evals/`) must pool folds by item count and take std only across
+              seeds; a cell that silently averages a different language set across
+              source groups is a bug (the zero-shot column must be identical across
+              the rows of one target group).
+            - **Immutable group configs** -- once any entry of a `config/groups/*.yml`
+              has been dispatched, editing or reordering its existing entries is a
+              bug (array indices are positional; run dirs and result rows point back
+              by name). Appending entries or dispatch notes is fine. A changed recipe
+              is a NEW grid with a new number+letter; the units a dispatched grid used
+              must be frozen under `config/units/archive/{grid}/` before they change.
+            - **Numbering** -- one number+letter per GRID; its per-source-group files
+              share it (`14b_x.{enarzho,joshi5}`); two grids never share a number;
+              the source group is not repeated in the grid name.
+            - **Language groups** -- `LANG_GROUPS` in `src/xlt_langs.py` is the only
+              source of source languages; a low-perf list must never intersect the
+              backbone's seen set; `tests/test_lang_groups.py` pins the literals.
+              Any table built from a borrowed group must say whose measurement
+              defined it.
+            - **Run environment** -- instructions and scripts never run python on the
+              login node: everything goes through `sbatch --array=...` +
+              `runtime/clusters/pegasus/shell/run.sh`. Flag a bare `sbatch` without
+              `--array`, an unthrottled array (no `%N`), a shell loop over `sbatch`,
+              a CPU-only job without `--gpus=0` + the CPU partition pin, `--mem`
+              below 30G, or sbatch flags placed after `run.sh`.
+            - **Datasets** -- folder names use `--`, never `|`; a tokenized dir is a
+              template whose `{lang}` / `fold{N}` segments the runner swaps; SIB-200
+              entries never set `fold:`.
+            - **Tests** -- new behaviour needs a test that checks behaviour, not
+              mocks. Tests run in the container (`python -m pytest tests/`), so a
+              test may import `datasets`/`pandas` but must not need a GPU, the
+              network, or anything under `artefacts/`.
+            - **Scope** -- model/trainer/dataset/PEFT machinery belongs in the sibling
+              micm-nlp, not in `scripts/`; `src/` holds importable helpers,
+              `scripts/` entry points. `quant.py` / `quant_boot_diff_sci.py` are
+              representation analysis, never accuracy significance.
+            - **Claims** -- a statement about what the XPE paper shows must come from
+              `docs/papers/xpe.pdf` (section/table named), not from memory.
+            - **Security** -- tokens live only in the gitignored `.env`: flag a
+              committed token or key, anything under `artefacts/` or `wandb/` being
+              committed, `yaml.load` instead of `safe_load`, `torch.load` without
+              `weights_only=True`, or `trust_remote_code=True` as a default.
+
+            Post only GitHub comments, never conversation text:
+            - one top-level comment with `gh pr comment`: a verdict line
+              (**Approve** / **Changes requested** / **Comment**) and a short list of findings;
+            - `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`)
+              for each finding tied to specific lines.
+
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
