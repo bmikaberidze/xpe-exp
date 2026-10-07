@@ -5,11 +5,12 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from scripts.evals.unify_xlt_test_res import (
+from scripts.evals.lang_table import (
     collect, has_seed_axis, pool_folds, seed_mean_std, pool_zero_shot,
     column_name, unify_runs, to_wide, restrict_to_langs,
     backbone, seen_langs_for, add_seen, low_perf_langs_for, restrict_to_seeds,
-    LLM_SEEN_GROUP,
+    LLM_SEEN_GROUP, perf_groups, add_perf, write_aggregate, ZERO_SHOT_REQUIRED,
+    check_unique,
 )
 from src.xlt_langs import LANG_GROUPS, LOW_PERF_LANG_GROUPS
 
@@ -363,7 +364,7 @@ def test_llm_seen_group_covers_every_backbone():
     `low_perf_langs_for` degrades to an empty set on an unknown llm, but
     `seen_langs_for` RAISES -- so a backbone with a LOW_PERF_LANG_GROUPS entry
     and no LLM_SEEN_GROUP entry trains and tests fine and then blows up at
-    unify, after the whole grid has been spent. That is exactly what happened
+    lang_table time, after the whole grid has been spent. That is exactly what happened
     when 'xlmr' was added for grid 21a. Pin it.
     """
     missing = sorted(set(LOW_PERF_LANG_GROUPS) - set(LLM_SEEN_GROUP))
@@ -387,3 +388,100 @@ def test_unknown_backbone_still_degrades_to_no_low_perf_row():
     # low_perf_langs_for must never raise on a backbone without a list; the
     # table simply carries no `seen == -1` row.
     assert low_perf_langs_for('some_future_backbone') == set()
+
+
+# --- performance groups from the zero-shot ranking --------------------------
+
+def _zs(accs: dict[str, float]) -> pd.DataFrame:
+    return pd.DataFrame([{'method': 'zero_shot', 'target_lang': lang, 'mean_acc': a}
+                         for lang, a in accs.items()])
+
+
+def test_perf_groups_top_half_high_bottom_quarter_low():
+    groups = perf_groups(_zs({f'l{i}': 0.9 - 0.1 * i for i in range(8)}))
+    assert [groups[f'l{i}'] for i in range(8)] == ['high'] * 4 + ['mid'] * 2 + ['low'] * 2
+
+
+def test_perf_groups_belebele_sizes():
+    groups = perf_groups(_zs({f'l{i:03d}': 1 - i / 200 for i in range(122)}))
+    sizes = pd.Series(groups).value_counts().to_dict()
+    assert sizes == {'high': 61, 'mid': 31, 'low': 30}
+
+
+def test_perf_groups_tie_at_the_cut_is_split_by_name_and_reported(capsys):
+    groups = perf_groups(_zs({'b': 0.5, 'a': 0.5, 'c': 0.2, 'd': 0.1}),
+                         high_frac=0.25, low_frac=0.25)
+    assert groups == {'a': 'high', 'b': 'mid', 'c': 'mid', 'd': 'low'}
+    assert 'tie at the high cut' in capsys.readouterr().out
+
+
+def test_perf_groups_rejects_overlapping_fractions():
+    with pytest.raises(ValueError):
+        perf_groups(_zs({'a': 0.5, 'b': 0.4}), high_frac=0.8, low_frac=0.5)
+
+
+def test_add_perf_goes_right_after_seen_and_rejects_unranked_langs():
+    wide = pd.DataFrame({'target_lang': ['a', 'b'], 'seen': [1, 0], 'spt_acc': [0.5, 0.4]})
+    out = add_perf(wide.copy(), {'a': 'high', 'b': 'low'})
+    assert list(out.columns) == ['target_lang', 'seen', 'perf', 'spt_acc']
+    assert list(out['perf']) == ['high', 'low']
+    with pytest.raises(ValueError):
+        add_perf(wide.copy(), {'a': 'high'})
+
+
+def test_zero_shot_rows_need_no_method_or_seed(tmp_path):
+    d = tmp_path / 'zs'
+    d.mkdir()
+    pd.DataFrame([{'llm': 'aya', 'metric_group': 'deu_Latn', 'accuracy': 0.8, 'n': 900}]
+                 ).to_csv(d / 'test.csv', index=False)
+    with pytest.raises(SystemExit):
+        collect(d)
+    assert list(collect(d, required=ZERO_SHOT_REQUIRED)['target_lang']) == ['deu_Latn']
+
+
+def test_write_aggregate_ranks_over_all_zero_shot_langs_not_just_targets(tmp_path):
+    # 4 langs in the zero-shot run, only the 2 weakest are targets of the grid:
+    # they must stay mid/low, not be re-ranked into high/low among themselves.
+    zs = tmp_path / 'zs'
+    zs.mkdir()
+    pd.DataFrame([{'llm': 'aya', 'metric_group': lang, 'accuracy': a, 'n': 900}
+                  for lang, a in [('eng_Latn', 0.9), ('deu_Latn', 0.8),
+                                  ('amh_Ethi', 0.4), ('kac_Latn', 0.3)]]
+                 ).to_csv(zs / 'test.csv', index=False)
+    grid = tmp_path / 'grid'
+    for seed in (10, 11):
+        _run_dir(grid, f'spt_s{seed}', [
+            {'llm': 'aya', 'method': 'spt', 'seed': seed, 'fold': 0,
+             'metric_group': lang, 'accuracy': 0.5, 'n': 300}
+            for lang in ('amh_Ethi', 'kac_Latn')])
+    write_aggregate(grid, grid / 'lang_table', zs)
+    out = pd.read_csv(grid / 'lang_table.csv')
+    assert list(out.columns)[:4] == ['target_lang', 'seen', 'perf', 'zero_shot_acc']
+    assert dict(zip(out['target_lang'], out['perf'])) == {'amh_Ethi': 'mid', 'kac_Latn': 'low'}
+    assert dict(zip(out['target_lang'], out['zero_shot_acc'])) == {'amh_Ethi': 0.4, 'kac_Latn': 0.3}
+
+
+# --- pre-micm-nlp-0.4 runs (raw.csv) ----------------------------------------
+
+def _legacy_row(run_name, lang, fold=0, seed=10, acc=0.5):
+    return {'run_name': run_name, 'run_group': '14a', 'llm': 'aya', 'src_tag': 'enarzho',
+            'fold': fold, 'seed': seed, 'target_lang': lang, 'accuracy': acc, 'n': 300}
+
+
+def test_collect_reads_legacy_raw_csv_and_derives_method_from_run_name(tmp_path):
+    d = tmp_path / '20260707_004707_xpe_f0_s10'
+    d.mkdir()
+    pd.DataFrame([_legacy_row('20260707_004707_xpe_f0_s10', 'acm_Arab')]).to_csv(d / 'raw.csv', index=False)
+    df = collect(tmp_path)
+    assert df.iloc[0]['method'] == 'xpe'
+    assert df.iloc[0]['source_group'] == 'enarzho'
+    assert has_seed_axis(df)
+
+
+def test_check_unique_rejects_a_duplicated_run():
+    df = pd.DataFrame([_legacy_row('xpe_f0_s10', 'acm_Arab'),
+                       _legacy_row('xpe_f0_s10', 'acm_Arab')])
+    df['method'] = 'xpe'
+    with pytest.raises(ValueError, match='xpe_f0_s10'):
+        check_unique(df)
+    check_unique(df.iloc[:1])

@@ -21,6 +21,12 @@ Two modes, chosen automatically by what the runs carry:
                     xpe_std, spt_std, dual_std, n_seeds, n_items
     Optional --zero-shot-path pools an existing zero-shot run's folds into a
     `zero_shot_acc`/`zero_shot_std` pair (no seed axis -> std is NaN, n_seeds 0).
+    It also adds a `perf` column after `seen` -- the performance-based target
+    group, which needs no published pretraining list: every language of the
+    zero-shot run is ranked by its accuracy, the top --high-frac (default 50%)
+    are `high`, the bottom --low-frac (default 25%) are `low`, the rest `mid`.
+    The ranking is over ALL the zero-shot run's languages, not just this grid's
+    targets, so a language's group does not depend on the source group.
 
   FALLBACK mode -- the runs carry no seed column (e.g. plain LR-search test
   runs): no aggregation is possible, so emit one column per run instead:
@@ -31,14 +37,26 @@ The path is one group directory -- one experiment, one source group, one table
 (`docs/micm-nlp-0.4-migration.md`).
 
 Usage:
-    python -m scripts.evals.unify_xlt_test_res \\
+    python -m scripts.evals.lang_table \\
         artefacts/runs/groups/14a_bebe_grid_full_aya.enarzho \\
         --zero-shot-path artefacts/runs/groups/zs_bebe_folds_aya
 
-    python -m scripts.evals.unify_xlt_test_res <group dir>   # fallback if no folds/seeds
+    # zero-shot from ONE run of a mixed group (rows need no method/seed column)
+    python -m scripts.evals.lang_table \\
+        artefacts/runs/groups/26a_bebe_grid_aya.aya_high \\
+        --zero-shot-path artefacts/runs/groups/25_bebe_zeroshot/20260924_035112_probe_aya_zs
+
+    python -m scripts.evals.lang_table <group dir>   # fallback if no folds/seeds
 
     # Runs dispatched before `llm:` was a group entry key
-    python -m scripts.evals.unify_xlt_test_res <group dir> --llm aya
+    python -m scripts.evals.lang_table <group dir> --llm aya
+
+    # A pre-micm-nlp-0.4 grid (raw.csv per run), written into the 0.4 layout so
+    # target_source_table can set it next to a 0.5-era grid
+    python -m scripts.evals.lang_table \\
+        artefacts/evals/xlt_runs/aya/enarzho/14a_bebe_grid_full_aya \\
+        --zero-shot-path artefacts/runs/groups/25_bebe_zeroshot/20260924_035112_probe_aya_zs \\
+        --out-prefix artefacts/runs/groups/14a_bebe_grid_full_aya.enarzho/lang_table
 """
 import argparse
 import re
@@ -66,7 +84,7 @@ LLM_SEEN_GROUP = {
 
 # Every backbone that can appear in the `llm` column needs an entry above --
 # seen_langs_for() RAISES on a miss (unlike low_perf_langs_for(), which degrades
-# to an empty set). A missing key therefore surfaces only at unify time, i.e.
+# to an empty set). A missing key therefore surfaces only at lang_table time, i.e.
 # after a whole grid has already been trained. test_llm_seen_group_covers_every_backbone
 # pins this against LOW_PERF_LANG_GROUPS so a new backbone cannot be half-wired.
 
@@ -81,16 +99,25 @@ def column_name(run_dir: Path) -> str:
 # no second config and writes the plain name. Neither carries a stage suffix,
 # having no training phase of its own. One row per metric group, and a metric
 # group is a target language (scripts/xlt_runner.py).
-RESULTS_GLOBS = ('separate_test*.csv', 'test.csv')
+RESULTS_GLOBS = ('separate_test*.csv', 'test.csv', 'raw.csv')
 RESULTS_GLOB = RESULTS_GLOBS[0]   # what a tune-and-test grid writes; kept for messages
+
+# `raw.csv` is the pre-micm-nlp-0.4 per-run test file (artefacts/evals/xlt_runs/
+# {llm}/{src_tag}/{run_group}/{time_id}_{run_name}/raw.csv). It has no `method`
+# column -- the method is the run name's first segment (`xpe_f0_s10`) -- and
+# names the source group `src_tag`. Read so the era-bridged grids (14a) can be
+# tabulated next to 0.5-era ones; the bridge itself is grid 26b.
+LEGACY_COLUMNS = {'src_tag': 'source_group'}
 
 # What the group entry stamps on every row (micm_nlp.group.scalar_columns) and
 # what this script needs from it. `llm` and `source_group` are entry keys because
 # the run directory no longer carries them as path segments.
 REQUIRED = ('method', 'seed', 'target_lang', 'accuracy', 'n')
+# A zero-shot run has no method and no seed axis: its rows are pooled per language.
+ZERO_SHOT_REQUIRED = ('target_lang', 'accuracy', 'n')
 
 
-def collect(path: Path, llm: str | None = None) -> pd.DataFrame:
+def collect(path: Path, llm: str | None = None, required=REQUIRED) -> pd.DataFrame:
     """Every run's test rows under a group directory, one row per target language.
 
     Reads the 0.4 layout only -- `runs/groups/{group}/{time_id}_{name}/`. Results
@@ -99,7 +126,12 @@ def collect(path: Path, llm: str | None = None) -> pd.DataFrame:
     """
     frames = []
     for csv in sorted(f for g in RESULTS_GLOBS for f in Path(path).rglob(g)):
-        frames.append(pd.read_csv(csv))
+        df = pd.read_csv(csv)
+        if csv.name == 'raw.csv':
+            df = df.rename(columns=LEGACY_COLUMNS)
+            # run_name = `{time_id}_{method}_f{fold}_s{seed}`
+            df['method'] = df['run_name'].str.replace(TIMESTAMP_RE, '', regex=True).str.split('_').str[0]
+        frames.append(df)
     if not frames:
         raise SystemExit(f'No {" / ".join(RESULTS_GLOBS)} found under {path}')
     df = pd.concat(frames, ignore_index=True)
@@ -110,7 +142,7 @@ def collect(path: Path, llm: str | None = None) -> pd.DataFrame:
                 f'{path}: rows carry no `llm` column -- add `llm:` to the group entries, '
                 'or pass --llm for runs dispatched before it was added')
         df['llm'] = llm
-    missing = [c for c in REQUIRED if c not in df.columns]
+    missing = [c for c in required if c not in df.columns]
     if missing:
         raise SystemExit(f'{path}: result rows lack {missing}; found {sorted(df.columns)}')
     return df
@@ -143,6 +175,16 @@ def _n_folds(x: pd.DataFrame) -> int:
     if 'fold' not in x.columns or not x['fold'].notna().any():
         return 1
     return int(x['fold'].nunique())
+
+
+def check_unique(df: pd.DataFrame) -> None:
+    """Raise if two runs report the same (method, seed, fold, target_lang): a
+    duplicated or restarted run would otherwise be pooled as extra items."""
+    key = [c for c in ('method', 'seed', 'fold', 'target_lang') if c in df.columns]
+    dup = df[df.duplicated(key, keep=False)]
+    if len(dup):
+        runs = sorted(dup['run_name'].unique()) if 'run_name' in dup.columns else '?'
+        raise ValueError(f'{len(dup)} rows share a {key} key -- duplicated runs: {runs}')
 
 
 def pool_folds(df: pd.DataFrame) -> pd.DataFrame:
@@ -264,6 +306,45 @@ def add_seen(wide: pd.DataFrame, seen_langs, low_perf_langs=()) -> pd.DataFrame:
     return wide
 
 
+HIGH_FRAC, LOW_FRAC = 0.5, 0.25
+
+
+def perf_groups(zero_shot: pd.DataFrame, high_frac: float = HIGH_FRAC,
+                low_frac: float = LOW_FRAC) -> dict[str, str]:
+    """{lang: 'high' | 'mid' | 'low'} from a pooled zero-shot table.
+
+    Languages are ranked by zero-shot accuracy (ties broken by name, so the cut
+    is reproducible); the top `high_frac` are `high`, the bottom `low_frac` are
+    `low`. Both counts round DOWN on the low side and to nearest on the high
+    side: 122 Belebele langs -> 61 high, 30 low. A tie straddling a cut is
+    reported, because the tie-break then decides a group by name alone."""
+    if not 0 < low_frac <= 1 - high_frac < 1:
+        raise ValueError(f'need 0 < low_frac <= 1 - high_frac < 1, got '
+                         f'high_frac={high_frac}, low_frac={low_frac}')
+    ranked = zero_shot.sort_values(['mean_acc', 'target_lang'],
+                                   ascending=[False, True]).reset_index(drop=True)
+    n = len(ranked)
+    n_high, n_low = round(n * high_frac), int(n * low_frac)
+    acc = ranked['mean_acc']
+    for name, cut in (('high', n_high), ('low', n - n_low)):
+        if 0 < cut < n and acc[cut - 1] == acc[cut]:
+            print(f'warning: zero-shot tie at the {name} cut ({acc[cut]:.4f}): '
+                  f'{ranked["target_lang"][cut - 1]} / {ranked["target_lang"][cut]} '
+                  f'are split by name')
+    group = ['high'] * n_high + ['mid'] * (n - n_high - n_low) + ['low'] * n_low
+    return dict(zip(ranked['target_lang'], group))
+
+
+def add_perf(wide: pd.DataFrame, groups: dict[str, str]) -> pd.DataFrame:
+    """Insert the `perf` column (see perf_groups) right after `seen`. A target
+    lang the zero-shot run did not evaluate has no rank, which raises."""
+    missing = sorted(set(wide['target_lang']) - set(groups))
+    if missing:
+        raise ValueError(f'target langs absent from the zero-shot run: {missing}')
+    wide.insert(wide.columns.get_loc('seen') + 1, 'perf', wide['target_lang'].map(groups))
+    return wide
+
+
 def restrict_to_seeds(df: pd.DataFrame, seeds) -> pd.DataFrame:
     """Keep only the given seeds. Used to reproduce an earlier, smaller-n table
     from a grid that has since been extended (e.g. the first 5 of 10 seeds) --
@@ -278,21 +359,27 @@ def restrict_to_seeds(df: pd.DataFrame, seeds) -> pd.DataFrame:
 
 
 def write_aggregate(path: Path, prefix: Path, zero_shot_path: Path | None,
-                    seeds=None, llm: str | None = None) -> None:
+                    seeds=None, llm: str | None = None,
+                    high_frac: float = HIGH_FRAC, low_frac: float = LOW_FRAC) -> None:
     grid = collect(path, llm)
     if seeds:
         grid = restrict_to_seeds(grid, seeds)
+    check_unique(grid)
     long = seed_mean_std(pool_folds(grid))
+    groups = None
     if zero_shot_path is not None:
+        zs = pool_zero_shot(collect(zero_shot_path, llm, ZERO_SHOT_REQUIRED))
+        groups = perf_groups(zs, high_frac, low_frac)   # ranked over ALL langs
         # zero-shot is evaluated on all langs; keep only the grid's target langs
         # so every output row has all methods (no zero-shot-only rows).
-        zs = restrict_to_langs(pool_zero_shot(collect(zero_shot_path, llm)),
-                               long['target_lang'].unique())
+        zs = restrict_to_langs(zs, long['target_lang'].unique())
         long = pd.concat([long, zs], ignore_index=True)
 
     long = long.sort_values(['target_lang', 'method'])
     llm = backbone(grid)
     wide = add_seen(to_wide(long), seen_langs_for(llm), low_perf_langs_for(llm))
+    if groups is not None:
+        wide = add_perf(wide, groups)
     out = f'{prefix}.csv'
     wide.to_csv(out, index=False)
 
@@ -347,10 +434,14 @@ def main() -> None:
     ap.add_argument('path', type=Path, help='group directory to walk for test result files')
     ap.add_argument('--zero-shot-path', type=Path, default=None,
                     help='group directory of an existing zero-shot run (aggregate mode only)')
+    ap.add_argument('--high-frac', type=float, default=HIGH_FRAC,
+                    help=f'top fraction of the zero-shot ranking labelled `high` (default {HIGH_FRAC})')
+    ap.add_argument('--low-frac', type=float, default=LOW_FRAC,
+                    help=f'bottom fraction of the zero-shot ranking labelled `low` (default {LOW_FRAC})')
     ap.add_argument('--llm', default=None,
                     help='backbone tag, for runs dispatched before `llm:` was a group entry key')
     ap.add_argument('--out-prefix', type=Path, default=None,
-                    help='output prefix (default: PATH/test_unified)')
+                    help='output prefix (default: PATH/lang_table)')
     ap.add_argument('--seeds', default=None,
                     help='comma-separated seeds to keep, e.g. 10,11,12,13,14 '
                          '(aggregate mode only; default = every seed present)')
@@ -358,11 +449,12 @@ def main() -> None:
     ap.add_argument('--value', default='accuracy', help='value column (fallback mode)')
     args = ap.parse_args()
 
-    prefix = args.out_prefix or (args.path / 'test_unified')
+    prefix = args.out_prefix or (args.path / 'lang_table')
     seeds = [int(s) for s in args.seeds.split(',')] if args.seeds else None
 
     if has_seed_axis(collect(args.path, args.llm)):
-        write_aggregate(args.path, prefix, args.zero_shot_path, seeds, args.llm)
+        write_aggregate(args.path, prefix, args.zero_shot_path, seeds, args.llm,
+                        args.high_frac, args.low_frac)
     else:
         if args.zero_shot_path is not None:
             print('warning: --zero-shot-path ignored in fallback mode (no fold/seed columns)')

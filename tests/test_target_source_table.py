@@ -2,8 +2,8 @@
 import pandas as pd
 import pytest
 
-from scripts.evals.aggregate_xlt_res import (
-    aggregate, find_tables, method_cols, check_zero_shot_consistency,
+from scripts.evals.target_source_table import (
+    aggregate, find_tables, method_cols, check_zero_shot_consistency, source_sort_key,
 )
 from src.xlt_langs import LANG_GROUPS
 
@@ -20,7 +20,7 @@ LANGS = [
 
 
 def _write_table(root, src_group, langs, acc=0.5):
-    """A minimal test_unified.csv for one source group, in its `{grid}.{source_group}` dir."""
+    """A minimal lang_table.csv for one source group, in its `{grid}.{source_group}` dir."""
     d = root / f'{RUN_GROUP}.{src_group}'
     d.mkdir(parents=True)
     pd.DataFrame([
@@ -28,7 +28,7 @@ def _write_table(root, src_group, langs, acc=0.5):
          'zero_shot_acc': 0.30, 'spt_acc': acc, 'xpe_acc': acc + 0.02,
          'spt_std': 0.01, 'xpe_std': 0.01, 'n_seeds': 10, 'n_items': 900}
         for lang, flag in langs
-    ]).to_csv(d / 'test_unified.csv', index=False)
+    ]).to_csv(d / 'lang_table.csv', index=False)
     return d
 
 
@@ -81,10 +81,11 @@ def test_column_order_is_all_accs_then_all_stds_no_zero_shot_std(tmp_path):
     _write_table(tmp_path, 'enarzho', LANGS)
     agg = aggregate(tmp_path, RUN_GROUP, 'joshi5')
     assert list(agg.columns) == [
-        'target_group', 'source_group', 'n_langs',
+        'target_group', 'source_group', 'grid', 'n_langs', 'n_seeds',
         'zero_shot_acc', 'spt_acc', 'xpe_acc',   # accs together, zero_shot first
         'spt_std', 'xpe_std',                    # then stds; zero_shot has none
     ]
+    assert set(agg['grid']) == {RUN_GROUP} and set(agg['n_seeds']) == {10}
 
 
 def test_accuracies_are_percent_means_over_langs(tmp_path):
@@ -135,3 +136,59 @@ def test_low_perf_groups_cover_langs_that_exist_as_targets():
         assert len(langs) == len(set(langs)), f'{llm} has duplicates'
         assert all(len(l.split('_')) == 2 for l in langs)
         assert not set(langs) & set(LANG_GROUPS['joshi5'])
+
+
+# --- performance-based target groups ----------------------------------------
+
+PERF = {'amh_Ethi': 'low', 'kac_Latn': 'low', 'acm_Arab': 'mid', 'ceb_Latn': 'mid',
+        'ita_Latn': 'high', 'pol_Latn': 'high', 'deu_Latn': 'high', 'fra_Latn': 'high'}
+
+
+def _add_perf(d):
+    df = pd.read_csv(d / 'lang_table.csv')
+    df.insert(2, 'perf', df['target_lang'].map(PERF))
+    df.to_csv(d / 'lang_table.csv', index=False)
+
+
+def test_perf_target_groups_used_when_every_table_has_the_column(tmp_path):
+    _add_perf(_write_table(tmp_path, 'enarzho', LANGS))
+    agg = aggregate(tmp_path, RUN_GROUP, 'joshi5')
+    n = agg.set_index('target_group')['n_langs'].to_dict()
+    assert n == {'low-perf': 2, 'all wo high-perf': 4, 'high-perf wo j5': 2, 'all wo j5': 6}
+
+
+def test_high_source_group_is_labelled_by_role_and_grids_can_be_mixed(tmp_path):
+    _add_perf(_write_table(tmp_path, 'enarzho', LANGS))
+    d = _write_table(tmp_path, 'aya_high', LANGS)
+    d.rename(tmp_path / '26x_other_grid.aya_high')
+    _add_perf(tmp_path / '26x_other_grid.aya_high')
+    agg = aggregate(tmp_path, [RUN_GROUP, '26x_other_grid'], 'joshi5')
+    low = agg[agg['target_group'] == 'low-perf'].set_index('source_group')
+    assert list(low.index) == ['enarzho', 'high-perf']
+    assert low.loc['high-perf', 'grid'] == '26x_other_grid'
+    assert low.loc['enarzho', 'grid'] == RUN_GROUP
+
+
+def test_source_group_in_two_grids_is_ambiguous(tmp_path):
+    _write_table(tmp_path, 'enarzho', LANGS)
+    (tmp_path / f'{RUN_GROUP}.enarzho').rename(tmp_path / '26x_other_grid.enarzho')
+    _write_table(tmp_path, 'enarzho', LANGS)
+    with pytest.raises(SystemExit):
+        find_tables(tmp_path, [RUN_GROUP, '26x_other_grid'])
+
+
+def test_seen_target_groups_still_selectable_and_the_auto_fallback(tmp_path):
+    _add_perf(_write_table(tmp_path, 'enarzho', LANGS))
+    _write_table(tmp_path, 'joshi5', LANGS)                 # no perf column
+    for flavour in ('auto', 'seen'):
+        agg = aggregate(tmp_path, RUN_GROUP, 'joshi5', target_groups=flavour)
+        assert list(agg['target_group'].unique()) == ['low-perf', 'unseen', 'seen', 'all']
+    with pytest.raises(SystemExit):
+        aggregate(tmp_path, RUN_GROUP, 'joshi5', target_groups='perf')
+
+
+def test_source_order_comes_from_lang_group_sizes():
+    order = sorted(['aya_high', 'not_a_group', 'aya_seen', 'joshi5', 'enarzho'],
+                   key=source_sort_key)
+    assert order == ['enarzho', 'joshi5', 'aya_seen', 'aya_high', 'not_a_group']
+    assert [len(LANG_GROUPS[g]) for g in order[:4]] == sorted(len(LANG_GROUPS[g]) for g in order[:4])
