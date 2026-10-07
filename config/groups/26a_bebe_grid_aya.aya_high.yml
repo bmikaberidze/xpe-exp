@@ -20,6 +20,15 @@
 #          --group-config config/groups/26a_bebe_grid_aya.aya_high.yml \
 #          --runner scripts.xlt_runner:run \
 #          --root-path /fscratch/bmikaberidze/xpe-exp"
+#
+# Dispatch log (appended 2026-10-02):
+# - 2026-10-01, job 3467539 (all 60, %10, 80G): 37 completed on micm-nlp 6594fd9.
+#   Test-phase OOMs on H200 (token budget ignored the 20 virtual prompt tokens) and
+#   host-RAM kills when 8 of these jobs shared the B200 node (~200 GB real each).
+#   Failed runs' dirs moved to artefacts/_scratch/failed_runs/26a_bebe_grid_aya.aya_high/.
+# - 2026-10-02, job 3470447: the 23 missing entries (16,21,23,24,34,42-59), 120G,
+#   on micm-nlp 3ac7ee9 (PR #5: virtual tokens counted in the test token budget --
+#   batching only, predictions unchanged). Each run's info.json records its commit.
 
 configs:
   xpe:  ../units/tune.xpe.lm.aya.ds.bebe.yml
