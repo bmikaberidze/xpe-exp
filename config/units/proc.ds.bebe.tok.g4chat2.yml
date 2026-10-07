@@ -1,0 +1,100 @@
+# Tokenize the CHAT-TEMPLATED Belebele with GEMMA 4'S OWN markers (belebele_ftp_chat_gemma4,
+# written by scripts.datasets.wrap_bebe_ftp_chat --template gemma4) -- supersedes
+# proc.ds.bebe.tok.g4chat.yml, whose dataset carries the GEMMA 3 markers
+# (<start_of_turn>, not in the Gemma 4 vocabulary) and an open model turn without
+# the empty thought channel. Appended 2026-10-07 for probe 25/12 (g4_12b_it_turn).
+#
+# Original g4chat note -- Tokenize the CHAT-TEMPLATED Belebele (belebele_ftp_chat_gemma, written by
+# scripts.datasets.wrap_bebe_ftp_chat --template gemma) for GEMMA 4, same recipe
+# as proc.ds.bebe.tok.g4bos.yml: BASE tokenizer, add_special_tokens on (so <bos>
+# is still prepended by the tokenizer, never part of the text). Appended 2026-10-07
+# for the gemma-4-12B-it zero-shot probe (group 25, g4_12b_it_chat).
+#
+# The g4bos note, which applies here too -- it supersedes
+# proc.ds.bebe.tok.g4.yml, whose output must not be used.
+#
+# WHY (measured 2026-09-24): google/gemma-4-12B-it's tokenizer.json has
+# post_processor single = [SEQ] -- it does NOT prepend <bos>, because its chat
+# template inserts one. We feed raw FTP text and never apply the chat template, so
+# every sample was tokenized WITHOUT bos. Gemma is trained with bos always present:
+# g4-12B-it then scored 0.2510 (= the 4-choice chance floor) and g4-12B base 0.3482.
+# google/gemma-4-12B's post_processor is ["<bos>", SEQ] and its vocab + merges are
+# byte-identical to the -it one, so it is the right tokenizer for BOTH variants.
+#
+# Gemma 3 is NOT affected: -pt and -it both prepend <bos>.
+mode: preprocess # preprocess | train | finetune | evaluate | test
+
+task:
+    id: null
+    category: text_generation
+    name: mcqa_ftp # multi choice question answering as first token prediction
+
+tokenizer:
+    source: huggingface # local | huggingface
+    name: google/gemma-4-12B
+    type: null # null | wordpiece | sentpiece
+    algorithm: null
+    adapt_to_lm: false
+    args:
+        padding_side: right
+
+ds:
+    descriptive_name: null
+    category: benchmarks # benchmarks | corpora | collections | raw
+    dirs: mcqa/belebele_ftp_chat_gemma4/kat_Geor
+    name: null
+    type: huggingface_saved # text | csv | huggingface_saved | huggingface
+    splits:
+        train: false
+        test: true
+        validation: false
+    input:
+        key: text
+        standardize_key: true
+    label:
+        key: answer_label
+        standardize_key: true
+    task_id: null
+        # key: task_ids
+        # standardize_key: false
+    preproc_rules: # None
+        subset:
+            run: false
+            use: 0.1 # Use only (X*100)% of the dataset
+            save_as:  false # false | txt
+        tokenize:
+            run: true
+            pre_rules:
+                label_name_to_id: false
+                split_sentences: false # false | kast | nltkst | spacyst
+                append_eos_token: false
+                keep_target_texts_for_save: true
+                text_to_text_rules: false
+            rules:
+                max_length: 1024
+                padding: false # max_length | true (longest) | false (do_not_pad) 
+                truncation: false
+                add_special_tokens: true
+                return_special_tokens_mask: false
+                return_token_type_ids: false
+                return_length: true
+                return_tensors: np
+                is_split_into_words: false
+            post_rules:
+                end_truncation_with_eos: false
+                concat_samples: false
+                sort_by_len: true
+            save_as: huggingface # false | csv | huggingface
+        
+        
+env: # Eenvironment variables are stored in os.environ during load config
+
+    # CUDA_LAUNCH_BLOCKING: '1'
+    PYTORCH_CUDA_ALLOC_CONF: null # max_split_size_mb:128
+
+    # huggingface/tokenizers: The current process just got forked, after parallelism has already been used. 
+    # Disabling parallelism to avoid deadlocks...
+    # To disable this warning, you can either:
+    #         - Avoid using `tokenizers` before the fork if possible
+    #         - Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+    TOKENIZERS_PARALLELISM: 'true' # 'true' | 'false'

@@ -22,7 +22,7 @@ Input  = artefacts/datasets/benchmarks/mcqa/belebele_ftp/, every saved split in
 Output = the same tree under belebele_ftp_chat_{template}/; the input is untouched.
 
 Usage:
-    python -m scripts.datasets.wrap_bebe_ftp_chat --template gemma
+    python -m scripts.datasets.wrap_bebe_ftp_chat --template gemma4
 """
 
 import argparse
@@ -39,11 +39,21 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # {name: (opens the user turn, closes it and opens the model turn)}, copied from
-# the family's tokenizer_config.json `chat_template` with the generation prompt
-# included. `<end_of_turn>` follows the user text directly (no newline), as the
-# template renders it.
+# the family's chat_template.jinja rendered for ONE user message with the
+# generation prompt. The turn close follows the user text directly (no newline),
+# as the template renders it.
 CHAT_TEMPLATES = {
+    # Gemma 3 markers (<start_of_turn> / <end_of_turn>). Keyed `gemma` because the
+    # key names the output dir: belebele_ftp_chat_gemma/ is what probe 25/11 ran on.
     "gemma": ("<start_of_turn>user\n", "<end_of_turn>\n<start_of_turn>model\n"),
+    # Gemma 4 (chat_template.jinja "Canonical Chat Template", 2026-07-09): NEW
+    # markers <|turn> / <turn|>, and with thinking off (the default) the
+    # generation prompt ends in an EMPTY thought channel, so the first token the
+    # model emits after it is the answer. The Gemma 3 markers are NOT in the
+    # Gemma 4 vocabulary at all -- fed as text they tokenize into subword pieces.
+    # (belebele_ftp_chat_gemma/ = the `gemma` layout, probe 25/11, kept as evidence.)
+    "gemma4": ("<|turn>user\n",
+               "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"),
 }
 
 TOKENIZED_MARK = "tokenized--"

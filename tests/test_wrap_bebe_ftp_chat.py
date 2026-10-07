@@ -27,3 +27,9 @@ def test_wrap_tree_mirrors_root_and_fold_splits_and_skips_tokenized(tmp_path):
     assert root["test"][0]["answer_label"] == "A"                  # other columns untouched
     assert Dataset.load_from_disk(str(src / "eng_Latn" / "test"))[0]["text"] == FTP  # input untouched
     assert wrap_tree(src, dst, "gemma") == 0                        # idempotent
+
+
+def test_gemma4_layout_uses_its_own_markers_and_an_empty_thought_channel():
+    out = wrap_text(FTP, "gemma4")
+    assert out == "<|turn>user\n" + FTP + "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"
+    assert "<start_of_turn>" not in out   # Gemma 3 markers are not Gemma 4 tokens
