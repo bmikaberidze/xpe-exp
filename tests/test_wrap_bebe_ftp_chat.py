@@ -1,0 +1,29 @@
+"""Unit tests for the chat-template layer over the Belebele FTP dataset."""
+from datasets import Dataset, DatasetDict
+
+from scripts.datasets.wrap_bebe_ftp_chat import wrap_text, wrap_tree, saved_datasets
+
+FTP = "P: passage\nQ: question?\nA: a\nB: b\nC: c\nD: d\nAnswer："
+
+
+def test_wrap_text_is_the_harness_layout():
+    assert wrap_text(FTP, "gemma") == (
+        "<start_of_turn>user\n" + FTP + "<end_of_turn>\n<start_of_turn>model\n"
+    )
+
+
+def test_wrap_tree_mirrors_root_and_fold_splits_and_skips_tokenized(tmp_path):
+    src, dst = tmp_path / "belebele_ftp", tmp_path / "belebele_ftp_chat_gemma"
+    ds = Dataset.from_list([{"question_id": 0, "text": FTP, "answer_label": "A"}])
+    DatasetDict({"test": ds}).save_to_disk(str(src / "eng_Latn"))
+    ds.save_to_disk(str(src / "eng_Latn" / "fold0" / "train"))
+    ds.save_to_disk(str(src / "eng_Latn" / "tokenized--org--model" / "test"))
+
+    assert wrap_tree(src, dst, "gemma") == 2
+    assert [str(p) for p in saved_datasets(dst)] == ["eng_Latn/fold0/train", "eng_Latn/test"]
+
+    root = DatasetDict.load_from_disk(str(dst / "eng_Latn"))      # dataset_dict.json copied
+    assert root["test"][0]["text"] == wrap_text(FTP, "gemma")
+    assert root["test"][0]["answer_label"] == "A"                  # other columns untouched
+    assert Dataset.load_from_disk(str(src / "eng_Latn" / "test"))[0]["text"] == FTP  # input untouched
+    assert wrap_tree(src, dst, "gemma") == 0                        # idempotent
