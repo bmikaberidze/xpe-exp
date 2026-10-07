@@ -19,6 +19,8 @@ proc.ds.xsc.tok.aya.yml
 proc.ds.xsc.tok.bloom.yml
 proc.ds.bebe.tok.aya.yml
 proc.ds.bebe.tok.bloom.yml
+proc.ds.bebe.tok.g4bos.yml
+proc.ds.bebe.tok.g4chat.yml
 proc.ds.sib.tok.mdeberta.yml
 proc.ds.sib.tok.mgte.yml
 proc.ds.sib.tok.xlmr.yml

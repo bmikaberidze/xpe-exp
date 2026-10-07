@@ -65,3 +65,14 @@ runs:
   # ===== appended 2026-09-24: BLOOM base, for the base/it contrast on BLOOM too.
   # (Additive only -- indices 0-9 already ran and must not move.)
   - {config: bloombase, name: bloom_base_zs, llm: bloom-7b1, variant: base}
+
+  # ===== appended 2026-10-07: gemma-4-12B-it on the CHAT-TEMPLATED Belebele
+  # (belebele_ftp_chat_gemma: FTP text as the user turn, empty model turn opened --
+  # the lm-eval --apply_chat_template layout; scripts.datasets.wrap_bebe_ftp_chat).
+  # Probe: does -it recover from chance (0.273 with <bos>, index 9) once it sees its
+  # turn markers? Tokenized by proc.ds.bebe.tok.g4chat.yml. Index 11.
+  # Dispatch: wrap + tokenize as one CPU array job, this entry as a GPU array job
+  # with --dependency=afterok on it (100G, H100/H200/A100-80GB).
+  - {config: g4, name: g4_12b_it_chat, llm: gemma4-12B, size: 12B, variant: it_chat,
+     overrides: {model.pretrained.name: google/gemma-4-12B-it,
+                 ds.dirs: mcqa/belebele_ftp_chat_gemma/eng_Latn/tokenized--google--gemma-4-12B}}
