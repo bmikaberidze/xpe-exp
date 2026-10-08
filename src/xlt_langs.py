@@ -50,6 +50,26 @@ LANG_GROUPS = {
         'ben_Beng',
     ],
 
+    # Gemma 4 high-performing: the top 50% (61 of 122) Belebele langs by
+    # gemma-4-12B-it's own zero-shot accuracy through its chat template (group 25,
+    # run 20261008_002553_g4_12b_it_prefill, full 900 items, micm-nlp 0.5 era).
+    # Same rule as aya_high. The cut is NOT clean: #61 kat_Geor 0.8311, #62
+    # hin_Deva 0.8300 -- one item in 900 apart -- so hin_Deva's exclusion is the
+    # rule, not a gap in the data. Contains joshi5 and enarzho. Order = zero-shot rank.
+    'gemma_high': [
+        'eng_Latn', 'fra_Latn', 'por_Latn', 'spa_Latn', 'deu_Latn', 'ron_Latn',
+        'bul_Cyrl', 'rus_Cyrl', 'arb_Arab', 'pol_Latn', 'nob_Latn', 'dan_Latn',
+        'cat_Latn', 'ita_Latn', 'zho_Hans', 'vie_Latn', 'swe_Latn', 'nld_Latn',
+        'ukr_Cyrl', 'ind_Latn', 'ell_Grek', 'zsm_Latn', 'zho_Hant', 'fin_Latn',
+        'slk_Latn', 'hrv_Latn', 'afr_Latn', 'slv_Latn', 'tgl_Latn', 'kor_Hang',
+        'mkd_Cyrl', 'hun_Latn', 'ces_Latn', 'srp_Cyrl', 'heb_Hebr', 'tur_Latn',
+        'lvs_Latn', 'pes_Arab', 'isl_Latn', 'jpn_Jpan', 'als_Latn', 'swh_Latn',
+        'lit_Latn', 'uzn_Latn', 'tha_Thai', 'est_Latn', 'jav_Latn', 'ars_Arab',
+        'arz_Arab', 'pan_Guru', 'mar_Deva', 'hye_Armn', 'urd_Arab', 'ceb_Latn',
+        'ben_Beng', 'ory_Orya', 'guj_Gujr', 'azj_Latn', 'apc_Arab', 'sin_Sinh',
+        'kat_Geor',
+    ],
+
     # Grid 8 (BLOOMZ Belebele self-split, 2026-06-09): the 7 languages the old CLI took
     # as --source-langs, before named groups existed. Kept so that grid's rewritten
     # group config (config/groups/8_bebe_self_split_bloomz.self_split7.yml) can name it.
