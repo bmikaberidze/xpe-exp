@@ -43,7 +43,10 @@
 # 1's adapter. Indices 12-20 dispatched as job 3509343 (see the appended block).
 # Task 2 (xpe_unit_f2) then FAILED the same way -> 21 = replay of its adapter,
 # dispatched as job 3509578. Task 3 (xpe_clip3_f0) COMPLETED on the same H200 under
-# the auto budget (3:05, separate_test.csv present); task 0 still running.
+# the auto budget (3:05, separate_test.csv present), and so did task 0 (xpe_unit_f0,
+# 8:42, early-stopped at step 1700; slow because every 6,100-row eval took ~20 min
+# beside three co-tenant jobs). So the OOM was budget-vs-co-tenant
+# luck on a shared node, not deterministic; 12-21 keep the pin regardless.
 
 configs:
   xpe:  ../units/tune.xpe.lm.aya.ds.bebe.yml
