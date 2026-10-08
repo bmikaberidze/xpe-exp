@@ -41,6 +41,9 @@
 # phase (CUDA OOM, auto token budget vs fp32 logits on an H200); tasks 4-11 cancelled
 # before starting and re-listed as 12-19 with the budget pinned, 20 = replay of task
 # 1's adapter. Indices 12-20 dispatched as job 3509343 (see the appended block).
+# Task 2 (xpe_unit_f2) then FAILED the same way -> 21 = replay of its adapter,
+# dispatched as job 3509578. Task 3 (xpe_clip3_f0) COMPLETED on the same H200 under
+# the auto budget (3:05, separate_test.csv present); task 0 still running.
 
 configs:
   xpe:  ../units/tune.xpe.lm.aya.ds.bebe.yml
@@ -88,3 +91,7 @@ runs:
   # 20: replay of task 1's saved adapter (trained to step 1800, val acc 0.813; run
   # 20261008_172926_xpe_unit_f1_s10) -- the test phase only, pinned budget.
   - {config: test, name: xpe_unit_f1_s10_replay, seed: 10, fold: 1, method: xpe_unit, source_group: aya_high, llm: aya, adapter: cd06b9b3-ea2c-40d1-a3e4-61b14fd5921c, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}
+
+  # 21: replay of task 2's saved adapter (xpe_unit_f2, step 1800, val acc 0.819; run
+  # 20261008_1729xx_xpe_unit_f2_s10) -- same test-phase OOM as task 1.
+  - {config: test, name: xpe_unit_f2_s10_replay, seed: 10, fold: 2, method: xpe_unit, source_group: aya_high, llm: aya, adapter: c035cdf1-4ff7-404a-97f8-4479cdbc2360, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}
