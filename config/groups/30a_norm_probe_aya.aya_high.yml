@@ -37,7 +37,10 @@
 #          --runner scripts.xlt_runner:run \
 #          --root-path /fscratch/bmikaberidze/xpe-exp"
 #
-# Dispatched 2026-10-08: job 3508647 (indices 0-11, %10).
+# Dispatched 2026-10-08: job 3508647 (indices 0-11, %10). Task 1 FAILED in the test
+# phase (CUDA OOM, auto token budget vs fp32 logits on an H200); tasks 4-11 cancelled
+# before starting and re-listed as 12-19 with the budget pinned, 20 = replay of task
+# 1's adapter. Indices 12-20 dispatched as job 3509343 (see the appended block).
 
 configs:
   xpe:  ../units/tune.xpe.lm.aya.ds.bebe.yml
@@ -65,3 +68,23 @@ runs:
   - {config: spt, name: spt_clip3_f0_s10, seed: 10, fold: 0, method: spt_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test}}
   - {config: spt, name: spt_clip3_f1_s10, seed: 10, fold: 1, method: spt_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test}}
   - {config: spt, name: spt_clip3_f2_s10, seed: 10, fold: 2, method: spt_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test}}
+
+  # ===== appended 2026-10-08 after task 1 (xpe_unit_f1) OOMed in the TEST phase =====
+  # The Aya fold test unit calibrates test_max_tokens_per_batch: auto from free VRAM
+  # without the fp32 full-vocab logits (256k x tokens x 4 B); on the 140 GB H200 it
+  # picked a budget whose logits needed 40.9 GiB on top of 112 GiB in use. Entries
+  # 4-11 were cancelled before starting (sbatch 3508647_[4-11]) and are re-listed here
+  # with the budget pinned to 16384 (~17 GB of logits; the Gemma 4 unit's value) via
+  # separate_test overrides -- batching only, predictions unchanged. 12-19 = 4-11.
+  - {config: xpe, name: xpe_clip3_f1_s10_b16k, seed: 10, fold: 1, method: xpe_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: xpe, name: xpe_clip3_f2_s10_b16k, seed: 10, fold: 2, method: xpe_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: spt, name: spt_unit_f0_s10_b16k, seed: 10, fold: 0, method: spt_unit, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: unit}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: spt, name: spt_unit_f1_s10_b16k, seed: 10, fold: 1, method: spt_unit, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: unit}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: spt, name: spt_unit_f2_s10_b16k, seed: 10, fold: 2, method: spt_unit, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: unit}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: spt, name: spt_clip3_f0_s10_b16k, seed: 10, fold: 0, method: spt_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: spt, name: spt_clip3_f1_s10_b16k, seed: 10, fold: 1, method: spt_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: spt, name: spt_clip3_f2_s10_b16k, seed: 10, fold: 2, method: spt_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+
+  # 20: replay of task 1's saved adapter (trained to step 1800, val acc 0.813; run
+  # 20261008_172926_xpe_unit_f1_s10) -- the test phase only, pinned budget.
+  - {config: test, name: xpe_unit_f1_s10_replay, seed: 10, fold: 1, method: xpe_unit, source_group: aya_high, llm: aya, adapter: cd06b9b3-ea2c-40d1-a3e4-61b14fd5921c, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}
