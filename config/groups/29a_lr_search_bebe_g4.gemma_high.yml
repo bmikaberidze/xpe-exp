@@ -1,0 +1,62 @@
+# 29a_lr_search_bebe_g4, source group GEMMA_HIGH (g4) -- learning-rate search for the
+# GEMMA 4 12B instruct tune units (2026-10-08), the Gemma analogue of Aya's 10a + 10b
+# (which searched on aya_seen, Aya's largest source group; gemma_high is Gemma's).
+# LRs do not transfer across model families, so the Aya picks (xpe 5e-4, spt 0.5)
+# are only placeholders in the live units.
+#
+# Matrix: xpe lr {5e-5, 5e-4, 1e-3, 5e-3, 1e-2} + spt lr {5e-3, 5e-2, 1e-1, 5e-1, 1e0},
+# each x 3 seeds (10,11,12) on fold 0, tune_only -> 30 runs. One combined sweep instead
+# of Aya's coarse-then-fine pair because the Aya optimum brackets are known and both
+# grids together covered exactly these decades. max_steps 4000 (as Aya's search; the
+# grid trims to 2400) with accuracy early stopping (patience 5). Select on validation
+# accuracy: scripts/evals/lr_search_table.py artefacts/runs/groups/29a_lr_search_bebe_g4.gemma_high
+#
+# Units are FROZEN copies (config/units/archive/29a_lr_search_bebe_g4/) of the live
+# tune.{xpe,spt}.lm.g4.ds.bebe.yml at dispatch time, so the live units can take the
+# chosen LRs afterwards without making these runs stale. dual is not searched: it
+# takes the xpe pick for its XPE part and the spt pick for its SPT part (as for Aya).
+#
+# Dispatch (bf16 Gemma 4 fits 80 GB; never A100-40GB):
+#   sbatch --array=0-29%10 --mem=100G \
+#     --partition=H100,A100-80GB,H200,H200-PCI,H100-PCI \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m micm_nlp run-group \
+#          --group-config config/groups/29a_lr_search_bebe_g4.gemma_high.yml \
+#          --runner scripts.xlt_runner:run \
+#          --root-path /fscratch/bmikaberidze/xpe-exp"
+
+configs:
+  xpe: ../units/archive/29a_lr_search_bebe_g4/tune.xpe.lm.g4.ds.bebe.yml
+  spt: ../units/archive/29a_lr_search_bebe_g4/tune.spt.lm.g4.ds.bebe.yml
+
+runs:
+  - {config: xpe, name: xpe_lr5e5_s10_f0, seed: 10, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 5.0e-05, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr5e5_s11_f0, seed: 11, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 5.0e-05, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr5e5_s12_f0, seed: 12, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 5.0e-05, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr5e4_s10_f0, seed: 10, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.0005, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr5e4_s11_f0, seed: 11, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.0005, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr5e4_s12_f0, seed: 12, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.0005, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr1e3_s10_f0, seed: 10, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.001, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr1e3_s11_f0, seed: 11, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.001, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr1e3_s12_f0, seed: 12, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.001, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr5e3_s10_f0, seed: 10, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.005, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr5e3_s11_f0, seed: 11, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.005, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr5e3_s12_f0, seed: 12, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.005, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr1e2_s10_f0, seed: 10, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.01, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr1e2_s11_f0, seed: 11, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.01, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: xpe, name: xpe_lr1e2_s12_f0, seed: 12, fold: 0, method: xpe, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.01, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr5e3_s10_f0, seed: 10, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.005, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr5e3_s11_f0, seed: 11, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.005, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr5e3_s12_f0, seed: 12, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.005, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr5e2_s10_f0, seed: 10, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.05, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr5e2_s11_f0, seed: 11, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.05, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr5e2_s12_f0, seed: 12, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.05, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr1e1_s10_f0, seed: 10, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.1, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr1e1_s11_f0, seed: 11, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.1, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr1e1_s12_f0, seed: 12, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.1, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr5e1_s10_f0, seed: 10, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.5, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr5e1_s11_f0, seed: 11, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.5, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr5e1_s12_f0, seed: 12, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 0.5, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr1e0_s10_f0, seed: 10, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 1.0, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr1e0_s11_f0, seed: 11, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 1.0, training_args.args.max_steps: 4000}, tune_only: true}
+  - {config: spt, name: spt_lr1e0_s12_f0, seed: 12, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.learning_rate: 1.0, training_args.args.max_steps: 4000}, tune_only: true}

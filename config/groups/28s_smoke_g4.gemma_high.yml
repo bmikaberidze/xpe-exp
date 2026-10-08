@@ -1,0 +1,23 @@
+# 28s_smoke_g4, source group GEMMA_HIGH (g4) -- the host-RAM / source-concat half of
+# the Gemma 4 smoke (2026-10-08): tune_only, 20 steps, on the 61-language
+# concatenated source set (61 x 500 train + 61 x 100 validation rows), the largest
+# source group the Gemma 4 grid will train on. Checks that 100G host RAM holds the
+# concatenation + the 25 GB container unpack, and that a spt arm (plain soft prompt,
+# lr 0.5 placeholder) trains without dtype errors. NOT a result.
+#
+#   0  tune_only  (spt)
+#
+# Dispatch (see 28s_smoke_g4.enarzho.yml):
+#   sbatch --array=0 --mem=100G \
+#     --partition=H100,A100-80GB,H200,H200-PCI,H100-PCI \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m micm_nlp run-group \
+#          --group-config config/groups/28s_smoke_g4.gemma_high.yml \
+#          --runner scripts.xlt_runner:run \
+#          --root-path /fscratch/bmikaberidze/xpe-exp"
+
+configs:
+  spt:  ../units/tune.spt.lm.g4.ds.bebe.yml
+
+runs:
+  - {config: spt, name: spt_tune_only_f0_s10, seed: 10, fold: 0, method: spt, source_group: gemma_high, llm: g4, overrides: {training_args.args.max_steps: 20, training_args.args.eval_steps: 10, training_args.args.save_steps: 10}, tune_only: true}

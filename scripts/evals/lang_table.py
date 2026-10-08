@@ -74,6 +74,11 @@ TIMESTAMP_RE = re.compile(r'^\d{8}_\d{6}_')
 LLM_SEEN_GROUP = {
     'bloom': 'bloom_seen',
     'aya': 'aya_seen',
+    # Gemma 4 publishes no pretraining language list, so its "seen" set is the
+    # performance-based stand-in (top 50% by its own zero-shot, like aya_high). Its
+    # tables are built with the `perf` flavour (--zero-shot-path); this mapping only
+    # keeps seen_langs_for() from raising and marks the `seen` column consistently.
+    'g4': 'gemma_high',
     # SIB-200 encoders; these runs carry no fold axis (see has_seed_axis).
     'mdeberta': 'mdeberta_seen',
     'mgte': 'mgte_seen',

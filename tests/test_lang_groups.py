@@ -44,6 +44,17 @@ def test_aya_high_group():
     assert set(JOSHI5) <= set(aya_high)
     assert not set(aya_high) & set(LOW_PERF_LANG_GROUPS['aya'])
 
+
+def test_gemma_high_group():
+    gemma_high = LANG_GROUPS['gemma_high']
+    # top 50% of Belebele's 122 by gemma-4-12B-it zero-shot accuracy (chat template)
+    assert len(gemma_high) == 61
+    assert len(set(gemma_high)) == 61  # no duplicates
+    assert set(LANG_GROUPS['enarzho']) <= set(gemma_high)
+    assert set(JOSHI5) <= set(gemma_high)
+    assert gemma_high[0] == 'eng_Latn' and gemma_high[-1] == 'kat_Geor'  # rank order, cut point
+    assert 'hin_Deva' not in gemma_high  # #62, one item below the cut
+
 # --- SIB-200 encoder groups (pinned to src/sib200_meta.py) -------------------
 
 from src.sib200_meta import (

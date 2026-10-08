@@ -1,0 +1,27 @@
+# 28s_smoke_g4, source group ENARZHO (g4) -- end-to-end smoke of the GEMMA 4 12B
+# instruct tune units before any Gemma 4 experiment is dispatched (2026-10-08).
+# Mirrors 27s (the Aya smoke of the 0.5 refactor): 20 steps each, NOT a result.
+#
+#   0  tune + test  (xpe; separate_test over all 119 target langs on fold 0)
+#
+# What it checks: the bf16 base + fp32 prompt encoder train without dtype errors,
+# the 262k-vocab test phase fits the 16384-token budget on an 80 GB card beside the
+# 24 GB weights, the run dir carries info.json / eval_*.csv / separate_test*.csv,
+# and the saved adapter's prompt parameters are fp32 (inspect its safetensors after).
+# The gemma_high file of this grid smokes the 61-language concatenated source set.
+#
+# Dispatch (bf16 Gemma 4 fits 80 GB; never A100-40GB -- 80x slower on the test phase):
+#   sbatch --array=0 --mem=100G \
+#     --partition=H100,A100-80GB,H200,H200-PCI,H100-PCI \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m micm_nlp run-group \
+#          --group-config config/groups/28s_smoke_g4.enarzho.yml \
+#          --runner scripts.xlt_runner:run \
+#          --root-path /fscratch/bmikaberidze/xpe-exp"
+
+configs:
+  xpe:  ../units/tune.xpe.lm.g4.ds.bebe.yml
+  test: ../units/test.lm.g4.ds.bebe.fold.yml
+
+runs:
+  - {config: xpe, name: xpe_tune_test_f0_s10, seed: 10, fold: 0, method: xpe, source_group: enarzho, llm: g4, overrides: {training_args.args.max_steps: 20, training_args.args.eval_steps: 10, training_args.args.save_steps: 10}, separate_test: {config: test}}
