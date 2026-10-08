@@ -18,6 +18,11 @@
 #          --group-config config/groups/28s_smoke_g4.enarzho.yml \
 #          --runner scripts.xlt_runner:run \
 #          --root-path /fscratch/bmikaberidze/xpe-exp"
+#
+# Dispatched 2026-10-08: job 3508057 FAILED at model setup (Gemma4UnifiedConfig has no
+# top-level vocab_size; fixed in micm-nlp d69048c via get_text_config()); rerun job
+# 3508135 pinned to H100,A100-80GB -> COMPLETED on an H100 80 GB in 24:47, run dir
+# complete, adapter prompt params fp32 (artefacts/_scratch/check_adapter_dtype.py).
 
 configs:
   xpe:  ../units/tune.xpe.lm.g4.ds.bebe.yml

@@ -15,6 +15,10 @@
 #          --group-config config/groups/28s_smoke_g4.gemma_high.yml \
 #          --runner scripts.xlt_runner:run \
 #          --root-path /fscratch/bmikaberidze/xpe-exp"
+#
+# Dispatched 2026-10-08: job 3508520 (resubmitted on the full partition list incl. B200
+# after 1 h 20 m pending on the 80 GB cards) -> COMPLETED on an H200 in 42:45 with
+# --mem=100G, validation over all 6,100 source rows, no errors.
 
 configs:
   spt:  ../units/tune.spt.lm.g4.ds.bebe.yml
