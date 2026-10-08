@@ -24,6 +24,9 @@
 #          --group-config config/groups/29a_lr_search_bebe_g4.gemma_high.yml \
 #          --runner scripts.xlt_runner:run \
 #          --root-path /fscratch/bmikaberidze/xpe-exp"
+#
+# Dispatched 2026-10-08: job 3508740 (indices 0-29, %10), partitions
+# H100,A100-80GB,H200,H200-PCI,H100-PCI,B200 (B200 added after both 28s smokes passed).
 
 configs:
   xpe: ../units/archive/29a_lr_search_bebe_g4/tune.xpe.lm.g4.ds.bebe.yml

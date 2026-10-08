@@ -1,0 +1,67 @@
+# 30a_norm_probe_aya, source group AYA_HIGH (aya) -- does prompt-embedding
+# normalisation change XPE / SPT accuracy? (2026-10-08). The first run of the
+# NormalizePromptEncoderEmbeddings callback that actually applies: 15a's clip arms
+# never normalised (callback unregistered before micm-nlp d3ae7e1), so this has not
+# been measured before.
+#
+# What is normalised (encoder.normalize_embeddings, on_step_end): every 2-D trainable
+# param of the CrossPromptEncoder whose name contains `embedding` -- SPT's prompt table
+# (`embedding`, which IS the prompt the LM sees) and XPE's input table (`xpe_embedding`,
+# the INPUT of the MLP head; the head's output is not constrained). `unit` sets every
+# row to norm 1, `clip` caps rows at max_norm.
+#
+# Why max_norm 3 (artefacts/_scratch/norm_check.py, 26a seed-10 adapters, 2026-10-08):
+#   Aya embed_tokens rows   mean 2.23, p99 3.06, max 4.4
+#   XPE table rows          ~63.5 (= sqrt(4096): the N(0,1) init barely moves)
+#   XPE head OUTPUT rows    90 .. 1030   (what the LM sees: 40-460x a token)
+#   SPT prompt rows         130 .. 780   (60-350x a token)
+# 15a's max_norm 80 would have been a no-op for XPE's table (63 < 80). 3 ~= the token
+# p99, so both arms put the tables at token scale; for XPE the ReLU-MLP output scales
+# down with its input (~60x for unit).
+#
+# Design: one seed (10) x folds 0-2 x {xpe, spt} x {unit, clip3} = 12 tune+test runs on
+# the SAME live units and era as grid 26a (units unchanged since 26a: f9e3ca2 07:31 vs
+# first 26a run 07:35, 2026-10-01), so 26a's xpe/spt seed-10 rows (and its 5-seed band)
+# are the baseline -- no base arm here. `method` carries the arm so lang_table keeps the
+# columns apart (unknown methods sort after the known ones). Verify in wandb that
+# train/xpe_embedd_norm is logged (the callback's own signature) before reading results.
+# A single seed only resolves effects beyond 26a's seed spread (~1.5 pts); extend to
+# seeds 11-12 (append entries) if an arm looks promising.
+#
+# Dispatch (Aya fp32 needs >80 GB VRAM -> big-VRAM partitions; --mem is host RAM):
+#   sbatch --array=0-11%10 --mem=80G \
+#     --partition=B200,H200,H200-PCI,H100-PCI \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m micm_nlp run-group \
+#          --group-config config/groups/30a_norm_probe_aya.aya_high.yml \
+#          --runner scripts.xlt_runner:run \
+#          --root-path /fscratch/bmikaberidze/xpe-exp"
+#
+# Dispatched 2026-10-08: job 3508647 (indices 0-11, %10).
+
+configs:
+  xpe:  ../units/tune.xpe.lm.aya.ds.bebe.yml
+  spt:  ../units/tune.spt.lm.aya.ds.bebe.yml
+  test: ../units/test.lm.aya.ds.bebe.fold.yml
+
+runs:
+
+  # ===== xpe, unit =====
+  - {config: xpe, name: xpe_unit_f0_s10, seed: 10, fold: 0, method: xpe_unit, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: unit}, separate_test: {config: test}}
+  - {config: xpe, name: xpe_unit_f1_s10, seed: 10, fold: 1, method: xpe_unit, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: unit}, separate_test: {config: test}}
+  - {config: xpe, name: xpe_unit_f2_s10, seed: 10, fold: 2, method: xpe_unit, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: unit}, separate_test: {config: test}}
+
+  # ===== xpe, clip 3 =====
+  - {config: xpe, name: xpe_clip3_f0_s10, seed: 10, fold: 0, method: xpe_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test}}
+  - {config: xpe, name: xpe_clip3_f1_s10, seed: 10, fold: 1, method: xpe_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test}}
+  - {config: xpe, name: xpe_clip3_f2_s10, seed: 10, fold: 2, method: xpe_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test}}
+
+  # ===== spt, unit =====
+  - {config: spt, name: spt_unit_f0_s10, seed: 10, fold: 0, method: spt_unit, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: unit}, separate_test: {config: test}}
+  - {config: spt, name: spt_unit_f1_s10, seed: 10, fold: 1, method: spt_unit, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: unit}, separate_test: {config: test}}
+  - {config: spt, name: spt_unit_f2_s10, seed: 10, fold: 2, method: spt_unit, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: unit}, separate_test: {config: test}}
+
+  # ===== spt, clip 3 =====
+  - {config: spt, name: spt_clip3_f0_s10, seed: 10, fold: 0, method: spt_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test}}
+  - {config: spt, name: spt_clip3_f1_s10, seed: 10, fold: 1, method: spt_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test}}
+  - {config: spt, name: spt_clip3_f2_s10, seed: 10, fold: 2, method: spt_clip3, source_group: aya_high, llm: aya, overrides: {peft.encoder_embedding_normalize: clip, peft.encoder_embedding_normalize_max_norm: 3.0}, separate_test: {config: test}}
