@@ -67,9 +67,13 @@ CHAT_TEMPLATES = {
     # rows (so far scored on the raw text with no template at all).
     "gemma_prefill": ("<start_of_turn>user\n",
                       "<end_of_turn>\n<start_of_turn>model\n" + RESPONSE_TEMPLATE),
+    # Aya Expanse (CohereLabs, tokenizer_config.json `default` template): no system
+    # preamble, <BOS_TOKEN> from the tokenizer. Same prefill layout.
+    "aya_prefill": ("<|START_OF_TURN_TOKEN|><|USER_TOKEN|>",
+                    "<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>" + RESPONSE_TEMPLATE),
 }
 # Templates whose model turn carries RESPONSE_TEMPLATE: strip it off the user text.
-PREFILL = {"gemma4_prefill", "gemma_prefill"}
+PREFILL = {"gemma4_prefill", "gemma_prefill", "aya_prefill"}
 
 TOKENIZED_MARK = "tokenized--"
 
