@@ -97,3 +97,11 @@ runs:
   - {config: g4, name: g4_12b_it_prefill, llm: gemma4-12B, size: 12B, variant: it_prefill,
      overrides: {model.pretrained.name: google/gemma-4-12B-it,
                  ds.dirs: mcqa/belebele_ftp_chat_gemma4_prefill/eng_Latn/tokenized--google--gemma-4-12B}}
+
+  # ===== appended 2026-10-08: Gemma 3 12b -it scored the way Gemma 4 -it is in index
+  # 13 -- its own chat template with `Answer：` prefilled in the model turn
+  # (belebele_ftp_chat_gemma_prefill, proc.ds.bebe.tok.g3chat.yml), so the two
+  # instruct reference rows share one recipe. Index 3 (raw text) stays. Index 14.
+  - {config: g3, name: g3_12b_it_prefill, llm: gemma3-12b, size: 12b, variant: it_prefill,
+     overrides: {model.pretrained.name: google/gemma-3-12b-it,
+                 ds.dirs: mcqa/belebele_ftp_chat_gemma_prefill/eng_Latn/tokenized--google--gemma-3-4b-it}}

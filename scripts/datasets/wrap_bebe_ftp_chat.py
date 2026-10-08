@@ -63,9 +63,13 @@ CHAT_TEMPLATES = {
     # FTP text's trailing `Answer：` already acted as a prefill.
     "gemma4_prefill": ("<|turn>user\n",
                        "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>" + RESPONSE_TEMPLATE),
+    # The same prefill layout with Gemma 3's markers, for the Gemma 3 -it reference
+    # rows (so far scored on the raw text with no template at all).
+    "gemma_prefill": ("<start_of_turn>user\n",
+                      "<end_of_turn>\n<start_of_turn>model\n" + RESPONSE_TEMPLATE),
 }
 # Templates whose model turn carries RESPONSE_TEMPLATE: strip it off the user text.
-PREFILL = {"gemma4_prefill"}
+PREFILL = {"gemma4_prefill", "gemma_prefill"}
 
 TOKENIZED_MARK = "tokenized--"
 
