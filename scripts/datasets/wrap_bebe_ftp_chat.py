@@ -84,7 +84,9 @@ def wrap_text(text: str, template: str) -> str:
 
 
 def wrap_dataset(ds: Dataset, template: str) -> Dataset:
-    return ds.map(lambda ex: {"text": wrap_text(ex["text"], template)})
+    # keep_in_memory: otherwise `map` drops a cache-*.arrow next to the SOURCE
+    # dataset, littering belebele_ftp/ with one file per wrap and split.
+    return ds.map(lambda ex: {"text": wrap_text(ex["text"], template)}, keep_in_memory=True)
 
 
 def saved_datasets(root: Path):
