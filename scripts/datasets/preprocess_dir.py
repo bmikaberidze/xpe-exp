@@ -24,6 +24,7 @@ proc.ds.bebe.tok.g4chat.yml
 proc.ds.bebe.tok.g4chat2.yml
 proc.ds.bebe.tok.g4chat3.yml
 proc.ds.bebe.tok.g3chat.yml
+proc.ds.bebe.tok.ayachat.yml
 proc.ds.sib.tok.mdeberta.yml
 proc.ds.sib.tok.mgte.yml
 proc.ds.sib.tok.xlmr.yml

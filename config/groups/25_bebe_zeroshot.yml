@@ -105,3 +105,12 @@ runs:
   - {config: g3, name: g3_12b_it_prefill, llm: gemma3-12b, size: 12b, variant: it_prefill,
      overrides: {model.pretrained.name: google/gemma-3-12b-it,
                  ds.dirs: mcqa/belebele_ftp_chat_gemma_prefill/eng_Latn/tokenized--google--gemma-3-4b-it}}
+
+  # ===== appended 2026-10-08: Aya Expanse through its own chat template with
+  # `Answer：` prefilled in the chatbot turn (belebele_ftp_chat_aya_prefill,
+  # proc.ds.bebe.tok.ayachat.yml) -- the recipe that fixed Gemma 4 -it (index 13),
+  # measured on all 122 langs for Aya. Index 0 (raw text, the grids' recipe) stays
+  # the reference; this row only says whether a chat layout would matter for Aya.
+  # Index 15.
+  - {config: aya, name: aya_zs_prefill, llm: aya, variant: it_prefill,
+     overrides: {ds.dirs: mcqa/belebele_ftp_chat_aya_prefill/eng_Latn/tokenized--CohereLabs--aya-expanse-8b}}

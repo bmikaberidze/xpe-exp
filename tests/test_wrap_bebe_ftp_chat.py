@@ -49,3 +49,10 @@ def test_gemma_prefill_is_the_gemma3_layout_with_the_response_in_the_model_turn(
     out = wrap_text(FTP, "gemma_prefill")
     body = FTP[: -len("Answer：")].rstrip("\n")
     assert out == "<start_of_turn>user\n" + body + "<end_of_turn>\n<start_of_turn>model\nAnswer："
+
+
+def test_aya_prefill_uses_the_cohere_turn_tokens_with_the_response_in_the_model_turn():
+    out = wrap_text(FTP, "aya_prefill")
+    body = FTP[: -len("Answer：")].rstrip("\n")
+    assert out == ("<|START_OF_TURN_TOKEN|><|USER_TOKEN|>" + body
+                   + "<|END_OF_TURN_TOKEN|><|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>Answer：")
