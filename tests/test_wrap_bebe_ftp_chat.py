@@ -33,3 +33,19 @@ def test_gemma4_layout_uses_its_own_markers_and_an_empty_thought_channel():
     out = wrap_text(FTP, "gemma4")
     assert out == "<|turn>user\n" + FTP + "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"
     assert "<start_of_turn>" not in out   # Gemma 3 markers are not Gemma 4 tokens
+
+
+def test_gemma4_prefill_moves_the_response_template_into_the_model_turn():
+    out = wrap_text(FTP, "gemma4_prefill")
+    body = FTP[: -len("Answer：")].rstrip("\n")
+    assert out == "<|turn>user\n" + body + "<turn|>\n<|turn>model\n<|channel>thought\n<channel|>Answer："
+    assert out.count("Answer：") == 1
+    import pytest
+    with pytest.raises(ValueError):
+        wrap_text("no response template here", "gemma4_prefill")
+
+
+def test_gemma_prefill_is_the_gemma3_layout_with_the_response_in_the_model_turn():
+    out = wrap_text(FTP, "gemma_prefill")
+    body = FTP[: -len("Answer：")].rstrip("\n")
+    assert out == "<start_of_turn>user\n" + body + "<end_of_turn>\n<start_of_turn>model\nAnswer："
