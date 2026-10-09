@@ -34,6 +34,8 @@
 #          --group-config config/groups/31a_wd_probe_aya.aya_high.yml \
 #          --runner scripts.xlt_runner:run \
 #          --root-path /fscratch/bmikaberidze/xpe-exp"
+#
+# Dispatched 2026-10-09: job 3512576 (indices 0-8, %10).
 
 configs:
   xpe:  ../units/tune.xpe.lm.aya.ds.bebe.yml
