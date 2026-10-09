@@ -1,0 +1,57 @@
+# 31a_wd_probe_aya, source group AYA_HIGH (aya) -- does stronger weight decay on the
+# XPE prompt encoder (table + MLP head) change cross-lingual transfer? (2026-10-09)
+#
+# Why: the live Aya units run ONE global AdamW group at lr 5e-4 / weight_decay 0.01
+# (the legacy nlpka recipe, xpe_utils.py: 0.01 everywhere). Decoupled decay shrinks
+# a weight by lr x wd per step = 5e-6, i.e. ~1% over a 1800-step run: the encoder is
+# effectively unregularised (dropout 0.1 in the MLP is the only brake besides early
+# stopping on source-language validation). 30a showed the XPE input table barely moves
+# from init (row norm 63.5 +- 0.75) and that the MLP head carries the method, so the
+# MLP's regularisation is the lever to test. Common LLM fine-tuning uses wd 0.1.
+#
+# Ladder, geometric in lr x wd x steps (lr x steps ~= 0.9 at early stop):
+#   wd 0.1  -> pure-decay factor 0.91 (standard)
+#   wd 0.3  -> 0.76
+#   wd 1.0  -> 0.41 (strong; gradients hold an equilibrium norm, it is not 60% dead)
+# XPE only (the hypothesis is about the MLP), seed 10, folds 0-2, tune + test, compared
+# to 26a's xpe/spt seed-10 rows (same live units and era as 26a/30a; the override
+# touches only the optimizer). All three arms are reported; selection, if any, on
+# validation. `method` carries the arm (xpe_wd01 / xpe_wd03 / xpe_wd1).
+#
+# Batching (the Peggy GPU-idle flags on 29a): the in-training eval ran 6,100 rows at
+# the fixed batch size 2 (~20 min per eval, every 100 steps). The entries switch the
+# eval dataloader to the token-budget sampler (eval_force_sequential false +
+# eval_max_tokens_per_batch 16384, the same budget the test phase uses) via overrides,
+# so the live unit stays byte-identical for 26a/30a. Batching only; predictions
+# unchanged (the budget sampler's order is re-aligned in compute_metrics, exercised
+# by every test phase). The test phase pins the same budget (30a's OOM lesson).
+#
+# Dispatch (Aya fp32 needs >80 GB VRAM; --mem is host RAM):
+#   sbatch --array=0-8%10 --mem=80G \
+#     --partition=B200,H200,H200-PCI,H100-PCI \
+#     runtime/clusters/pegasus/shell/run.sh --site-packages \
+#       "python -m micm_nlp run-group \
+#          --group-config config/groups/31a_wd_probe_aya.aya_high.yml \
+#          --runner scripts.xlt_runner:run \
+#          --root-path /fscratch/bmikaberidze/xpe-exp"
+
+configs:
+  xpe:  ../units/tune.xpe.lm.aya.ds.bebe.yml
+  test: ../units/test.lm.aya.ds.bebe.fold.yml
+
+runs:
+
+  # ===== wd 0.1 =====
+  - {config: xpe, name: xpe_wd01_f0_s10, seed: 10, fold: 0, method: xpe_wd01, source_group: aya_high, llm: aya, overrides: {training_args.args.weight_decay: 0.1, custom_training_args.eval_force_sequential: false, custom_training_args.eval_max_tokens_per_batch: 16384}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: xpe, name: xpe_wd01_f1_s10, seed: 10, fold: 1, method: xpe_wd01, source_group: aya_high, llm: aya, overrides: {training_args.args.weight_decay: 0.1, custom_training_args.eval_force_sequential: false, custom_training_args.eval_max_tokens_per_batch: 16384}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: xpe, name: xpe_wd01_f2_s10, seed: 10, fold: 2, method: xpe_wd01, source_group: aya_high, llm: aya, overrides: {training_args.args.weight_decay: 0.1, custom_training_args.eval_force_sequential: false, custom_training_args.eval_max_tokens_per_batch: 16384}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+
+  # ===== wd 0.3 =====
+  - {config: xpe, name: xpe_wd03_f0_s10, seed: 10, fold: 0, method: xpe_wd03, source_group: aya_high, llm: aya, overrides: {training_args.args.weight_decay: 0.3, custom_training_args.eval_force_sequential: false, custom_training_args.eval_max_tokens_per_batch: 16384}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: xpe, name: xpe_wd03_f1_s10, seed: 10, fold: 1, method: xpe_wd03, source_group: aya_high, llm: aya, overrides: {training_args.args.weight_decay: 0.3, custom_training_args.eval_force_sequential: false, custom_training_args.eval_max_tokens_per_batch: 16384}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: xpe, name: xpe_wd03_f2_s10, seed: 10, fold: 2, method: xpe_wd03, source_group: aya_high, llm: aya, overrides: {training_args.args.weight_decay: 0.3, custom_training_args.eval_force_sequential: false, custom_training_args.eval_max_tokens_per_batch: 16384}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+
+  # ===== wd 1.0 =====
+  - {config: xpe, name: xpe_wd1_f0_s10, seed: 10, fold: 0, method: xpe_wd1, source_group: aya_high, llm: aya, overrides: {training_args.args.weight_decay: 1.0, custom_training_args.eval_force_sequential: false, custom_training_args.eval_max_tokens_per_batch: 16384}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: xpe, name: xpe_wd1_f1_s10, seed: 10, fold: 1, method: xpe_wd1, source_group: aya_high, llm: aya, overrides: {training_args.args.weight_decay: 1.0, custom_training_args.eval_force_sequential: false, custom_training_args.eval_max_tokens_per_batch: 16384}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
+  - {config: xpe, name: xpe_wd1_f2_s10, seed: 10, fold: 2, method: xpe_wd1, source_group: aya_high, llm: aya, overrides: {training_args.args.weight_decay: 1.0, custom_training_args.eval_force_sequential: false, custom_training_args.eval_max_tokens_per_batch: 16384}, separate_test: {config: test, overrides: {custom_training_args.test_max_tokens_per_batch: 16384, custom_training_args.eval_max_tokens_per_batch: 16384}}}
