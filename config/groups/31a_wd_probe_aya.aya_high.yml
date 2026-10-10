@@ -35,7 +35,12 @@
 #          --runner scripts.xlt_runner:run \
 #          --root-path /fscratch/bmikaberidze/xpe-exp"
 #
-# Dispatched 2026-10-09: job 3512576 (indices 0-8, %10).
+# Dispatched 2026-10-09: job 3512576 (indices 0-8, %10). All 9 COMPLETED 2026-10-10 on
+# serv-3345, 1:31-2:01 each (the token-budget eval takes ~90 s per 6,100 rows vs ~15 min
+# at batch 2; step-100 val acc .719 vs 26a's .706, so the sampler re-alignment holds).
+# Result (unseen-61 mean, seed 10, vs 26a xpe .404 / spt .404): wd 0.1 .401, wd 0.3 .410,
+# wd 1 .409; low-perf (bottom 25%, 30 langs) .339 / .352 / .353 vs .350; validation flat
+# (.78/.81/.82 at every wd). Weight decay is not a lever on this probe.
 
 configs:
   xpe:  ../units/tune.xpe.lm.aya.ds.bebe.yml
